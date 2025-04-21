@@ -106,6 +106,9 @@ impl Default for ConstClientIdValidator {
                         "https://pumpdump.wtf/api/oauth/callback".parse().unwrap(),
                         "https://pd.dev/api/oauth/callback".parse().unwrap(),
                         "http://localhost:5190/api/oauth/callback".parse().unwrap(),
+                        "https://pump-dump-kit.fly.dev/api/oauth/callback"
+                            .parse()
+                            .unwrap(),
                     ],
                     client_type: OAuthClientType::Web,
                 },
