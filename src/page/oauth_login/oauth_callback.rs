@@ -1,5 +1,5 @@
 use leptos::prelude::*;
-use leptos_router::{components::Redirect, hooks::use_query, params::Params};
+use leptos_router::{components::Redirect, hooks::use_query, params::Params, NavigateOptions};
 
 use crate::{components::spinner::Spinner, error::AuthErrorKind, oauth::AuthCodeError};
 
@@ -53,7 +53,12 @@ pub fn OAuthCallbackPage() -> impl IntoView {
         <Suspense fallback=move || view! { <div class="w-dvw h-dvh flex items-center justify-center bg-black"><Spinner/></div> }>
             {move || Suspend::new(async move {
                 let redirect_res = res.await.unwrap_or_else(|e| e.to_redirect());
-                view! { <Redirect path=redirect_res/> }
+                view! {
+                    <Redirect
+                        path=redirect_res
+                        options=NavigateOptions { resolve: false, ..Default::default() }
+                    />
+                }
             })}
         </Suspense>
     }
