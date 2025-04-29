@@ -96,7 +96,10 @@ impl Default for ConstClientIdValidator {
                 // Yral IOS
                 OAuthClient {
                     client_id: "e1a6a7fb-8a1d-42dc-87b4-13ff94ecbe34".to_string(),
-                    redirect_urls: vec!["app://test".parse().unwrap()],
+                    redirect_urls: vec![
+                        "com.yral.iosApp://oauth/callback".parse().unwrap(),
+                        "com.yral.iosApp.staging://oauth/callback".parse().unwrap(),
+                    ],
                     client_type: OAuthClientType::Native,
                 },
                 // Yral Next.js
