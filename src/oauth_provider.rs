@@ -118,6 +118,7 @@ impl AppleClientSecretGen {
         };
         let mut token_header = jsonwebtoken::Header::new(jsonwebtoken::Algorithm::ES256);
         token_header.kid = Some(self.key_id.clone());
+        token_header.typ = None;
 
         let token = jsonwebtoken::encode(&token_header, &claims, &self.auth_key)
             .expect("Failed to encode Apple client secret?!");
