@@ -9,42 +9,13 @@ use openidconnect::{
 };
 
 use crate::{
-    consts::GOOGLE_ISSUER_URL,
+    consts::{APPLE_ISSUER_URL, GOOGLE_ISSUER_URL},
     kv::KVStoreImpl,
     oauth::{client_validation::ClientIdValidatorImpl, SupportedOAuthProviders},
+    oauth_provider::{
+        AppleOAuthProvider, IdentityOAuthProvider, OAuthProviderImpl, StdOAuthClient,
+    },
 };
-
-type OAuthProvider = openidconnect::Client<
-    openidconnect::EmptyAdditionalClaims,
-    openidconnect::core::CoreAuthDisplay,
-    openidconnect::core::CoreGenderClaim,
-    openidconnect::core::CoreJweContentEncryptionAlgorithm,
-    openidconnect::core::CoreJsonWebKey,
-    openidconnect::core::CoreAuthPrompt,
-    openidconnect::StandardErrorResponse<openidconnect::core::CoreErrorResponseType>,
-    openidconnect::StandardTokenResponse<
-        openidconnect::IdTokenFields<
-            openidconnect::EmptyAdditionalClaims,
-            openidconnect::EmptyExtraTokenFields,
-            openidconnect::core::CoreGenderClaim,
-            openidconnect::core::CoreJweContentEncryptionAlgorithm,
-            openidconnect::core::CoreJwsSigningAlgorithm,
-        >,
-        openidconnect::core::CoreTokenType,
-    >,
-    openidconnect::StandardTokenIntrospectionResponse<
-        openidconnect::EmptyExtraTokenFields,
-        openidconnect::core::CoreTokenType,
-    >,
-    openidconnect::core::CoreRevocableToken,
-    openidconnect::StandardErrorResponse<openidconnect::RevocationErrorResponseType>,
-    openidconnect::EndpointSet,
-    openidconnect::EndpointNotSet,
-    openidconnect::EndpointNotSet,
-    openidconnect::EndpointNotSet,
-    openidconnect::EndpointMaybeSet,
-    openidconnect::EndpointMaybeSet,
->;
 
 #[derive(FromRef, Clone)]
 pub struct ServerState {
@@ -93,7 +64,7 @@ impl Default for JwkPairs {
 
 pub struct ServerCtx {
     pub oauth_http_client: reqwest::Client,
-    pub oauth_providers: HashMap<SupportedOAuthProviders, OAuthProvider>,
+    pub oauth_providers: HashMap<SupportedOAuthProviders, OAuthProviderImpl>,
     pub cookie_key: axum_extra::extract::cookie::Key,
     pub jwk_pairs: JwkPairs,
     pub kv_store: KVStoreImpl,
@@ -101,32 +72,66 @@ pub struct ServerCtx {
 }
 
 impl ServerCtx {
+    async fn init_oauth_client(
+        client_id_env: &str,
+        issuer_url: IssuerUrl,
+        redirect_url: RedirectUrl,
+        http_client: &reqwest::Client,
+    ) -> StdOAuthClient {
+        let client_id =
+            env::var(client_id_env).unwrap_or_else(|_| panic!("`{client_id_env}` is required!"));
+
+        let oauth_metadata = CoreProviderMetadata::discover_async(issuer_url, http_client)
+            .await
+            .unwrap();
+
+        CoreClient::from_provider_metadata(oauth_metadata, ClientId::new(client_id), None)
+            .set_redirect_uri(redirect_url)
+    }
+
     async fn init_oauth_providers(
         http_client: &reqwest::Client,
-    ) -> HashMap<SupportedOAuthProviders, OAuthProvider> {
+    ) -> HashMap<SupportedOAuthProviders, OAuthProviderImpl> {
         let mut oauth_providers = HashMap::new();
 
-        let client_id = env::var("GOOGLE_CLIENT_ID").expect("`GOOGLE_CLIENT_ID` is required!");
-        let client_secret =
-            env::var("GOOGLE_CLIENT_SECRET").expect("`GOOGLE_CLIENT_SECRET` is required!");
         let redirect_uri =
-            env::var("GOOGLE_REDIRECT_URL").expect("`GOOGLE_REDIRECT_URI` is required!");
+            env::var("OAUTH_REDIRECT_URL").expect("`OAUTH_REDIRECT_URI` is required!");
+        let redirect_uri = RedirectUrl::new(redirect_uri).expect("Invalid `OAUTH_REDIRECT_URI`");
 
-        let google_oauth_metadata = CoreProviderMetadata::discover_async(
+        // Google OAuth
+        let google_client_secret =
+            env::var("GOOGLE_CLIENT_SECRET").expect("`GOOGLE_CLIENT_SECRET` is required!");
+
+        let google_oauth = Self::init_oauth_client(
+            "GOOGLE_CLIENT_ID",
             IssuerUrl::new(GOOGLE_ISSUER_URL.to_string()).unwrap(),
+            redirect_uri.clone(),
             http_client,
         )
         .await
-        .unwrap();
+        .set_client_secret(ClientSecret::new(google_client_secret));
+        let google_oauth = IdentityOAuthProvider::new(google_oauth);
+        oauth_providers.insert(SupportedOAuthProviders::Google, google_oauth.into());
 
-        let google_oauth = CoreClient::from_provider_metadata(
-            google_oauth_metadata,
-            ClientId::new(client_id),
-            Some(ClientSecret::new(client_secret)),
+        // Apple OAuth
+        let apple_team_id = env::var("APPLE_TEAM_ID").expect("`APPLE_TEAM_ID` is required!");
+        let apple_key_id = env::var("APPLE_KEY_ID").expect("`APPLE_KEY_ID` is required!");
+        let apple_auth_key =
+            env::var("APPLE_AUTH_KEY_PEM").expect("`APPLE_AUTH_KEY_PEM` is required!");
+        let apple_auth_key = jsonwebtoken::EncodingKey::from_ec_pem(apple_auth_key.as_bytes())
+            .expect("invalid `APPLE_AUTH_KEY_PEM`");
+
+        let apple_oauth = Self::init_oauth_client(
+            "APPLE_CLIENT_ID",
+            IssuerUrl::new(APPLE_ISSUER_URL.to_string()).unwrap(),
+            redirect_uri.clone(),
+            http_client,
         )
-        .set_redirect_uri(RedirectUrl::new(redirect_uri).unwrap());
+        .await;
+        let apple_oauth =
+            AppleOAuthProvider::new(apple_oauth, apple_auth_key, apple_key_id, apple_team_id);
 
-        oauth_providers.insert(SupportedOAuthProviders::Google, google_oauth);
+        oauth_providers.insert(SupportedOAuthProviders::Apple, apple_oauth.into());
 
         oauth_providers
     }

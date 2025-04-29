@@ -15,7 +15,7 @@ use leptos::prelude::{expect_context, ServerFnError};
 use leptos_axum::{extract, extract_with_state, ResponseOptions};
 use openidconnect::{
     core::CoreAuthenticationFlow, AuthorizationCode, CsrfToken, Nonce, PkceCodeChallenge,
-    PkceCodeVerifier, Scope,
+    PkceCodeVerifier,
 };
 use serde::{Deserialize, Serialize};
 
@@ -27,6 +27,7 @@ use crate::{
         jwt::generate::generate_code_grant_jwt, login_hint_message, AuthLoginHint, AuthQuery,
         SupportedOAuthProviders,
     },
+    oauth_provider::OAuthProvider,
     utils::identity::generate_random_identity_and_save,
 };
 
@@ -61,7 +62,8 @@ pub async fn get_oauth_url_impl(
     let oauth_provider = ctx
         .oauth_providers
         .get(&provider)
-        .ok_or_else(|| ServerFnError::new("unsupported provider"))?;
+        .ok_or_else(|| ServerFnError::new("unsupported provider"))?
+        .get_client();
 
     let (pkce_challenge, pkce_verifier) = PkceCodeChallenge::new_random_sha256();
 
@@ -74,16 +76,14 @@ pub async fn get_oauth_url_impl(
         .map_err(|_| ServerFnError::new("failed to serialize oauth state"))?;
     let oauth_state_b64 = BASE64_URL_SAFE.encode(oauth_state_raw);
 
-    let oauth2_request = oauth_provider
+    let (auth_url, oauth_csrf_token, _) = oauth_provider
         .authorize_url(
             CoreAuthenticationFlow::AuthorizationCode,
             move || CsrfToken::new(oauth_state_b64),
             Nonce::new_random,
         )
-        .add_scope(Scope::new("openid".to_string()))
-        .set_pkce_challenge(pkce_challenge);
-
-    let (auth_url, oauth_csrf_token, _) = oauth2_request.url();
+        .set_pkce_challenge(pkce_challenge)
+        .url();
 
     let mut jar: PrivateCookieJar = extract_with_state(&ctx.cookie_key).await?;
 
@@ -162,7 +162,8 @@ async fn generate_oauth_login_code(
     let oauth2 = ctx
         .oauth_providers
         .get(&provider)
-        .ok_or_else(|| AuthErrorKind::unexpected("unsupported provider"))?;
+        .ok_or_else(|| AuthErrorKind::unexpected("unsupported provider"))?
+        .get_client();
 
     let token_res = oauth2
         .exchange_code(AuthorizationCode::new(code))
@@ -172,7 +173,6 @@ async fn generate_oauth_login_code(
         .await
         .map_err(AuthErrorKind::unexpected)?;
 
-    let id_token_verifier = oauth2.id_token_verifier();
     let id_token = token_res
         .extra_fields()
         .id_token()
@@ -180,7 +180,7 @@ async fn generate_oauth_login_code(
 
     // we don't use a nonce
     let claims = id_token
-        .claims(&id_token_verifier, no_op_nonce_verifier)
+        .claims(&oauth2.id_token_verifier(), no_op_nonce_verifier)
         .map_err(AuthErrorKind::unexpected)?;
     let sub_id = claims.subject();
 

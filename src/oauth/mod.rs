@@ -18,12 +18,14 @@ pub mod client_validation;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Hash, Serialize, Deserialize)]
 pub enum SupportedOAuthProviders {
     Google,
+    Apple,
 }
 
 impl Display for SupportedOAuthProviders {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Google => write!(f, "google"),
+            Self::Apple => write!(f, "apple"),
         }
     }
 }
@@ -34,6 +36,7 @@ impl FromStr for SupportedOAuthProviders {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "google" => Ok(Self::Google),
+            "apple" => Ok(Self::Apple),
             _ => Err(AuthErrorKind::InvalidProvider(s.to_string())),
         }
     }

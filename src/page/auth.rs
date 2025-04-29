@@ -10,7 +10,10 @@ use leptos_router::{
 use url::Url;
 
 use crate::{
-    components::{google_symbol::GoogleSymbol, spinner::Spinner, yral_symbol::YralSymbol},
+    components::{
+        apple_symbol::AppleSymbol, google_symbol::GoogleSymbol, spinner::Spinner,
+        yral_symbol::YralSymbol,
+    },
     error::AuthErrorKind,
     oauth::{
         client_validation::{ClientIdValidator, ClientIdValidatorImpl},
@@ -170,6 +173,12 @@ pub fn LoginContent(auth: AuthQuery) -> impl IntoView {
                         <Icon attr:class="text-xl rounded-full" icon=GoogleSymbol />
                     </div>
                     <span class="text-neutral-900">{"Continue with Google"}</span>
+                </LoginButton>
+                <LoginButton auth=auth_store attr:class="flex flex-row justify-center cursor-pointer items-center pr-4 bg-white rounded-full border border-gray-300 hover:bg-neutral-200" provider=SupportedOAuthProviders::Apple>
+                    <div class="grid grid-cols-1 place-items-center">
+                        <Icon attr:class="text-4xl" icon=AppleSymbol />
+                    </div>
+                    <span class="text-black">{"Continue with Apple"}</span>
                 </LoginButton>
             </div>
         </div>

@@ -7,6 +7,8 @@ pub mod error;
 #[cfg(feature = "ssr")]
 pub mod kv;
 pub mod oauth;
+#[cfg(feature = "ssr")]
+mod oauth_provider;
 mod page;
 pub mod utils;
 
