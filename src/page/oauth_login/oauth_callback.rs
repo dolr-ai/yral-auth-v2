@@ -1,5 +1,5 @@
 use leptos::prelude::*;
-use leptos_router::{components::Redirect, hooks::use_query, params::Params, NavigateOptions};
+use leptos_router::{hooks::use_query, params::Params};
 
 use crate::{components::spinner::Spinner, error::AuthErrorKind, oauth::AuthCodeError};
 
@@ -13,6 +13,25 @@ pub struct OAuthQuery {
 pub async fn perform_oauth_login(code: String, state: String) -> Result<String, ServerFnError> {
     use super::server_impl::perform_oauth_login_impl;
     perform_oauth_login_impl(code, state).await
+}
+
+#[component]
+fn UrlOrIntentRedirect(url: String) -> impl IntoView {
+    #[cfg(feature = "ssr")]
+    {
+        use leptos_axum::redirect;
+        redirect(&url);
+    }
+    #[cfg(not(feature = "ssr"))]
+    {
+        let res = window()
+            .location()
+            .set_href(&url)
+            .map_err(|e| format!("{e:?}"));
+        if let Err(e) = res {
+            log::error!("Failed to redirect: {e}");
+        }
+    }
 }
 
 #[component]
@@ -54,10 +73,7 @@ pub fn OAuthCallbackPage() -> impl IntoView {
             {move || Suspend::new(async move {
                 let redirect_res = res.await.unwrap_or_else(|e| e.to_redirect());
                 view! {
-                    <Redirect
-                        path=redirect_res
-                        options=NavigateOptions { resolve: false, ..Default::default() }
-                    />
+                    <UrlOrIntentRedirect url=redirect_res/>
                 }
             })}
         </Suspense>
