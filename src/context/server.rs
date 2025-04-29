@@ -87,6 +87,7 @@ impl ServerCtx {
 
         CoreClient::from_provider_metadata(oauth_metadata, ClientId::new(client_id), None)
             .set_redirect_uri(redirect_url)
+            .set_auth_type(openidconnect::AuthType::RequestBody)
     }
 
     async fn init_oauth_providers(
