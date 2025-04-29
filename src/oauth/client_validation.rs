@@ -115,6 +115,11 @@ impl Default for ConstClientIdValidator {
                     ],
                     client_type: OAuthClientType::Web,
                 },
+                OAuthClient {
+                    client_id: "c89b29de-8366-4e62-9b9e-c29585740acf".to_string(),
+                    redirect_urls: vec!["yral://oauth/callback".parse().unwrap()],
+                    client_type: OAuthClientType::Native,
+                },
             ],
         }
     }
