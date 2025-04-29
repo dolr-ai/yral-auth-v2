@@ -165,19 +165,13 @@ async fn generate_oauth_login_code(
         .ok_or_else(|| AuthErrorKind::unexpected("unsupported provider"))?
         .get_client();
 
-    let token_res = match oauth2
+    let token_res = oauth2
         .exchange_code(AuthorizationCode::new(code))
         .map_err(AuthErrorKind::unexpected)?
         .set_pkce_verifier(pkce_verifier)
         .request_async(&ctx.oauth_http_client)
         .await
-    {
-        Ok(r) => r,
-        Err(e) => {
-            log::warn!("received error {e:?}");
-            return Err(AuthErrorKind::unexpected(e));
-        }
-    };
+        .map_err(AuthErrorKind::unexpected)?;
 
     let id_token = token_res
         .extra_fields()
