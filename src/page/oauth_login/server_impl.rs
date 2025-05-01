@@ -132,24 +132,34 @@ async fn try_extract_principal_from_oauth_sub(
     Ok(Some(principal_str))
 }
 
-async fn principal_from_login_hint_or_generate(
+async fn principal_from_login_hint_or_generate_and_save(
+    provider: SupportedOAuthProviders,
     kv: &KVStoreImpl,
+    sub_id: &str,
     login_hint: Option<AuthLoginHint>,
 ) -> Result<Principal, AuthErrorKind> {
-    let Some(login_hint) = login_hint else {
+    let user_principal = if let Some(login_hint) = login_hint {
+        let msg = login_hint_message();
+        login_hint
+            .signature
+            .verify_identity(login_hint.user_principal, msg)
+            .map_err(|_| AuthErrorKind::InvalidLoginHint)?;
+        login_hint.user_principal
+    } else {
         let identity = generate_random_identity_and_save(kv)
             .await
             .map_err(|_| AuthErrorKind::unexpected("failed to generate id"))?;
-        return Ok(identity.sender().unwrap());
+        identity.sender().unwrap()
     };
 
-    let msg = login_hint_message();
-    login_hint
-        .signature
-        .verify_identity(login_hint.user_principal, msg)
-        .map_err(|_| AuthErrorKind::InvalidLoginHint)?;
+    kv.write(
+        principal_lookup_key(provider, sub_id),
+        user_principal.to_text(),
+    )
+    .await
+    .map_err(|_| AuthErrorKind::unexpected("failed to associated id with oauth"))?;
 
-    Ok(login_hint.user_principal)
+    Ok(user_principal)
 }
 
 async fn generate_oauth_login_code(
@@ -191,7 +201,13 @@ async fn generate_oauth_login_code(
         Principal::from_text(principal_str)
             .map_err(|_| AuthErrorKind::unexpected("Invalid principal from KV"))?
     } else {
-        principal_from_login_hint_or_generate(&ctx.kv_store, query.login_hint.clone()).await?
+        principal_from_login_hint_or_generate_and_save(
+            provider,
+            &ctx.kv_store,
+            sub_id,
+            query.login_hint.clone(),
+        )
+        .await?
     };
 
     let headers: HeaderMap = extract().await.unwrap();
