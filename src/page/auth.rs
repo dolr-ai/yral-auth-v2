@@ -7,6 +7,7 @@ use leptos_router::{
     params::{Params, ParamsError},
     NavigateOptions,
 };
+use serde::{Deserialize, Serialize};
 use url::Url;
 
 use crate::{
@@ -40,6 +41,7 @@ pub struct AuthQueryMaybe {
     code_challenge_method: Option<CodeChallengeMethodS256>,
     nonce: Option<String>,
     login_hint: Option<AuthLoginHint>,
+    provider: Option<SupportedOAuthProviders>,
 }
 
 impl AuthQueryMaybe {
@@ -76,6 +78,12 @@ impl AuthQueryMaybe {
             nonce: self.nonce,
         })
     }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+enum AuthKind {
+    Default(Box<AuthQuery>),
+    Redirect(String),
 }
 
 #[component]
@@ -122,8 +130,10 @@ pub fn AuthPage() -> impl IntoView {
 
                 let res = match auth_query_maybe {
                     Ok(q) => {
+                        let provider = q.provider;
                         q.validate(&validator, redirect_uri.clone(), state.clone())
                             .await
+                            .map(|q| (q, provider))
                     }
                     Err(ParamsError::MissingParam(param)) => {
                         Err(AuthErrorKind::missing_param(param))
@@ -133,7 +143,16 @@ pub fn AuthPage() -> impl IntoView {
                         None => Err(AuthErrorKind::Unexpected(e.to_string())),
                     },
                 };
-                res.map_err(|e| AuthCodeError::new(e, Some(state), redirect_uri.clone()))
+                let (query, provider) =
+                    res.map_err(|e| AuthCodeError::new(e, Some(state), redirect_uri.clone()))?;
+                let Some(provider) = provider else {
+                    return Ok(AuthKind::Default(Box::new(query)));
+                };
+
+                let state_raw = postcard::to_stdvec(&query).unwrap();
+                let state = BASE64_URL_SAFE.encode(state_raw);
+                let redirect_path = format!("/oauth_redirector?provider={provider}&state={state}");
+                Ok(AuthKind::Redirect(redirect_path))
             }
         },
     );
@@ -144,8 +163,11 @@ pub fn AuthPage() -> impl IntoView {
                 {move || Suspend::new(async move {
                     let auth = auth_query.await;
                     match auth {
-                        Ok(auth) => Either::Left(view! {
+                        Ok(AuthKind::Default(auth)) => Either::Left(view! {
                             <LoginContent auth/>
+                        }),
+                        Ok(AuthKind::Redirect(path)) => Either::Right(view! {
+                            <Redirect path />
                         }),
                         Err(e) => {
                             Either::Right(view! {
@@ -160,7 +182,7 @@ pub fn AuthPage() -> impl IntoView {
 }
 
 #[component]
-pub fn LoginContent(auth: AuthQuery) -> impl IntoView {
+pub fn LoginContent(auth: Box<AuthQuery>) -> impl IntoView {
     let auth_store = StoredValue::new(auth);
 
     view! {
@@ -187,7 +209,7 @@ pub fn LoginContent(auth: AuthQuery) -> impl IntoView {
 
 #[component]
 pub fn LoginButton(
-    auth: StoredValue<AuthQuery>,
+    auth: StoredValue<Box<AuthQuery>>,
     children: Children,
     provider: SupportedOAuthProviders,
 ) -> impl IntoView {
