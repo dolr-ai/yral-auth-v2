@@ -274,6 +274,7 @@ pub enum TokenType {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TokenGrantRes {
     pub access_token: String,
+    pub id_token: String,
     pub token_type: TokenType,
     // seconds
     pub expires_in: usize,
@@ -281,9 +282,10 @@ pub struct TokenGrantRes {
 }
 
 impl TokenGrantRes {
-    pub fn new(access_token: String, refresh_token: String) -> Self {
+    pub fn new(access_token: String, id_token: String, refresh_token: String) -> Self {
         Self {
             access_token,
+            id_token,
             token_type: TokenType::Bearer,
             expires_in: ACCESS_TOKEN_MAX_AGE.as_secs() as usize,
             refresh_token,

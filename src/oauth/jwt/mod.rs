@@ -22,7 +22,19 @@ pub struct AuthCodeClaims {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AuthTokenClaims {
+pub struct AccessTokenClaims {
+    aud: String,
+    exp: usize,
+    iat: usize,
+    iss: String,
+    sub: Principal,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    nonce: Option<String>,
+    ext_is_anonymous: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IdTokenClaims {
     aud: String,
     exp: usize,
     iat: usize,

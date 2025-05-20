@@ -21,7 +21,7 @@ use crate::{
     oauth::{
         client_validation::ClientIdValidator,
         jwt::{
-            generate::{generate_access_token_jwt, generate_refresh_token_jwt},
+            generate::{generate_access_token_and_id_token_jwt, generate_refresh_token_jwt},
             AuthCodeClaims, RefreshTokenClaims,
         },
         AuthGrantQuery, TokenGrantError, TokenGrantErrorKind, TokenGrantRes, TokenGrantResult,
@@ -150,7 +150,7 @@ fn generate_access_token_with_identity(
     let delegated_identity = delegate_identity(&identity);
     let user_principal = identity.sender().unwrap();
 
-    let access_token = generate_access_token_jwt(
+    let (access_token, id_token) = generate_access_token_and_id_token_jwt(
         &ctx.jwk_pairs.auth_tokens.encoding_key,
         user_principal,
         delegated_identity,
@@ -168,7 +168,7 @@ fn generate_access_token_with_identity(
         is_anonymous,
     );
 
-    TokenGrantRes::new(access_token, refresh_token)
+    TokenGrantRes::new(access_token, id_token, refresh_token)
 }
 
 async fn generate_access_token(
