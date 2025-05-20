@@ -14,7 +14,7 @@ primary_region = 'sin'
   JWT_PUB_ED_PEM = """-----BEGIN PUBLIC KEY-----
 MCowBQYDK2VwAyEA04mJta0mU/O+rAVAjNzJxEWp+U8GKksjEI+vbepDfsQ=
 -----END PUBLIC KEY-----"""
-  OAUTH_REDIRECT_URL = "https://auth.yral.com/oauth_callback"
+  SERVER_URL = "https://auth.yral.com/"
   APPLE_CLIENT_ID = "com.yral.yral-auth"
   APPLE_TEAM_ID = "2UL556KNXC"
   APPLE_KEY_ID = "9DWVYWDYD8"

@@ -1,4 +1,5 @@
 use candid::Principal;
+use jsonwebtoken::jwk::Jwk;
 use serde::{Deserialize, Serialize};
 use url::Url;
 use yral_types::delegated_identity::DelegatedIdentityWire;
@@ -65,4 +66,9 @@ pub struct ClientSecretClaims {
     pub iat: usize,
     pub iss: String,
     pub sub: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct JsonWebKeySet {
+    pub keys: Vec<Jwk>,
 }

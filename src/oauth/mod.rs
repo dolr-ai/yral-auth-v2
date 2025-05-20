@@ -299,3 +299,8 @@ pub enum TokenGrantResult {
     Ok(TokenGrantRes),
     Err(TokenGrantError),
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PartialOIDCConfig {
+    pub jwks_uri: String,
+}
