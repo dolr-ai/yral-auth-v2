@@ -11,8 +11,9 @@ primary_region = 'sin'
 [env]
   PORT = '8080'
   GOOGLE_CLIENT_ID = '804814798298-taifmq3k6olk9bjr1cqb9gfnp1mssqqb.apps.googleusercontent.com'
-  JWT_PUB_ED_PEM = """-----BEGIN PUBLIC KEY-----
-MCowBQYDK2VwAyEA04mJta0mU/O+rAVAjNzJxEWp+U8GKksjEI+vbepDfsQ=
+  JWT_PUB_EC_PEM="""-----BEGIN PUBLIC KEY-----
+MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEoqN3/0RNfrnrnYGxKBgy/qHnmITr
++6ucjxStx7tjA30QJZlWzo0atxmY8y9dUR+eKQI0SnbQds4xLEU8+JGm8Q==
 -----END PUBLIC KEY-----"""
   SERVER_URL = "https://auth.yral.com/"
   APPLE_CLIENT_ID = "com.yral.yral-auth"
