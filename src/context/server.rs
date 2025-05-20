@@ -83,7 +83,7 @@ impl Default for JwkPairs {
         let auth_jwt_decoding_jwk = Jwk {
             common: jwk::CommonParameters {
                 public_key_use: Some(jwk::PublicKeyUse::Signature),
-                key_algorithm: Some(jwk::KeyAlgorithm::EdDSA),
+                key_algorithm: Some(jwk::KeyAlgorithm::ES256),
                 key_id: Some(AUTH_TOKEN_KID.into()),
                 ..Default::default()
             },
