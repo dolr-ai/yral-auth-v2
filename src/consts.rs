@@ -10,3 +10,5 @@ pub const APPLE_ISSUER_URL: &str = "https://appleid.apple.com";
 pub const ACCESS_TOKEN_MAX_AGE: Duration = Duration::from_secs(60 * 60 * 24 * 7);
 /// Refresh expiry, 30 days
 pub const REFRESH_TOKEN_MAX_AGE: Duration = Duration::from_secs(60 * 60 * 24 * 30);
+
+pub const AUTH_TOKEN_KID: &str = "default";

@@ -1,17 +1,22 @@
 use std::{collections::HashMap, env, sync::Arc};
 
 use axum::extract::FromRef;
+use base64::{prelude::BASE64_URL_SAFE_NO_PAD, Engine};
+use jsonwebtoken::jwk::{self, Jwk};
 use leptos::{config::LeptosOptions, prelude::expect_context};
 use leptos_axum::AxumRouteListing;
 use openidconnect::{
     core::{CoreClient, CoreProviderMetadata},
     reqwest, ClientId, ClientSecret, IssuerUrl, RedirectUrl,
 };
+use p256::pkcs8::DecodePublicKey;
 
 use crate::{
-    consts::{APPLE_ISSUER_URL, GOOGLE_ISSUER_URL},
+    consts::{APPLE_ISSUER_URL, AUTH_TOKEN_KID, GOOGLE_ISSUER_URL},
     kv::KVStoreImpl,
-    oauth::{client_validation::ClientIdValidatorImpl, SupportedOAuthProviders},
+    oauth::{
+        client_validation::ClientIdValidatorImpl, jwt::JsonWebKeySet, SupportedOAuthProviders,
+    },
     oauth_provider::{
         AppleOAuthProvider, IdentityOAuthProvider, OAuthProviderImpl, StdOAuthClient,
     },
@@ -30,14 +35,18 @@ pub struct JwkPair {
 }
 
 impl JwkPair {
-    pub fn load_from_env(encoding_env: &str, decoding_env: &str) -> Self {
+    fn load_encoding_key_from_env(encoding_env: &str) -> jsonwebtoken::EncodingKey {
         let jwt_pem =
             env::var(encoding_env).unwrap_or_else(|_| panic!("`{encoding_env}` is required!"));
+        jsonwebtoken::EncodingKey::from_ed_pem(jwt_pem.as_bytes())
+            .unwrap_or_else(|_| panic!("invalid `{encoding_env}`"))
+    }
+
+    pub fn load_from_env(encoding_env: &str, decoding_env: &str) -> Self {
+        let encoding_key = Self::load_encoding_key_from_env(encoding_env);
+
         let jwt_pub_pem =
             env::var(decoding_env).unwrap_or_else(|_| panic!("`{decoding_env}` is required!"));
-
-        let encoding_key = jsonwebtoken::EncodingKey::from_ed_pem(jwt_pem.as_bytes())
-            .unwrap_or_else(|_| panic!("invalid `{encoding_env}`"));
         let decoding_key = jsonwebtoken::DecodingKey::from_ed_pem(jwt_pub_pem.as_bytes())
             .unwrap_or_else(|_| panic!("invalid `{decoding_env}`"));
 
@@ -51,19 +60,61 @@ impl JwkPair {
 pub struct JwkPairs {
     pub auth_tokens: JwkPair,
     pub client_tokens: JwkPair,
+    pub well_known_jwks: JsonWebKeySet,
 }
 
 impl Default for JwkPairs {
     fn default() -> Self {
+        let auth_jwt_pub_pem =
+            env::var("JWT_PUB_EC_PEM").unwrap_or_else(|_| panic!("`JWT_PUB_EC_PEM` is required!"));
+        let auth_jwt_ec_pub = p256::ecdsa::VerifyingKey::from_public_key_pem(&auth_jwt_pub_pem)
+            .expect("Invalid `JWT_PUB_ED_PEM`");
+        let auth_jwt_ec = auth_jwt_ec_pub.to_encoded_point(false);
+
+        let auth_jwt_x = auth_jwt_ec.x().unwrap();
+        let auth_jwt_x_b64 = BASE64_URL_SAFE_NO_PAD.encode(auth_jwt_x);
+        let auth_jwt_y = auth_jwt_ec.y().unwrap();
+        let auth_jwt_y_b64 = BASE64_URL_SAFE_NO_PAD.encode(auth_jwt_y);
+
+        let auth_jwt_decoding_key =
+            jsonwebtoken::DecodingKey::from_ec_components(&auth_jwt_x_b64, &auth_jwt_y_b64)
+                .unwrap();
+
+        let auth_jwt_decoding_jwk = Jwk {
+            common: jwk::CommonParameters {
+                public_key_use: Some(jwk::PublicKeyUse::Signature),
+                key_algorithm: Some(jwk::KeyAlgorithm::ES256),
+                key_id: Some(AUTH_TOKEN_KID.into()),
+                ..Default::default()
+            },
+            algorithm: jwk::AlgorithmParameters::EllipticCurve(jwk::EllipticCurveKeyParameters {
+                key_type: jwk::EllipticCurveKeyType::EC,
+                curve: jwk::EllipticCurve::P256,
+                x: auth_jwt_x_b64,
+                y: auth_jwt_y_b64,
+            }),
+        };
+
+        let auth_jwt_pem =
+            env::var("JWT_EC_PEM").unwrap_or_else(|_| panic!("`JWT_EC_PEM` is required!"));
+
         Self {
-            auth_tokens: JwkPair::load_from_env("JWT_ED_PEM", "JWT_PUB_ED_PEM"),
+            auth_tokens: JwkPair {
+                encoding_key: jsonwebtoken::EncodingKey::from_ec_pem(auth_jwt_pem.as_bytes())
+                    .expect("invalid `JWT_EC_PEM`"),
+                decoding_key: auth_jwt_decoding_key,
+            },
             client_tokens: JwkPair::load_from_env("CLIENT_JWT_ED_PEM", "CLIENT_JWT_PUB_ED_PEM"),
+            well_known_jwks: JsonWebKeySet {
+                keys: vec![auth_jwt_decoding_jwk],
+            },
         }
     }
 }
 
 pub struct ServerCtx {
     pub oauth_http_client: reqwest::Client,
+    pub server_url: String,
     pub oauth_providers: HashMap<SupportedOAuthProviders, OAuthProviderImpl>,
     pub cookie_key: axum_extra::extract::cookie::Key,
     pub jwk_pairs: JwkPairs,
@@ -92,12 +143,12 @@ impl ServerCtx {
 
     async fn init_oauth_providers(
         http_client: &reqwest::Client,
+        server_url: &str,
     ) -> HashMap<SupportedOAuthProviders, OAuthProviderImpl> {
         let mut oauth_providers = HashMap::new();
 
-        let redirect_uri =
-            env::var("OAUTH_REDIRECT_URL").expect("`OAUTH_REDIRECT_URI` is required!");
-        let redirect_uri = RedirectUrl::new(redirect_uri).expect("Invalid `OAUTH_REDIRECT_URI`");
+        let redirect_uri = format!("{server_url}/oauth_callback");
+        let redirect_uri = RedirectUrl::new(redirect_uri).expect("Invalid `SERVER_URL`");
 
         // Google OAuth
         let google_client_secret =
@@ -168,7 +219,14 @@ impl ServerCtx {
             .redirect(reqwest::redirect::Policy::none())
             .build()
             .expect("Client should build");
-        let oauth_providers = Self::init_oauth_providers(&oauth_http_client).await;
+
+        let server_url = env::var("SERVER_URL").expect("`SERVER_URL` is required");
+        let server_url = server_url
+            .strip_suffix("/")
+            .unwrap_or(&server_url)
+            .to_string();
+
+        let oauth_providers = Self::init_oauth_providers(&oauth_http_client, &server_url).await;
 
         let cookie_key = Self::init_cookie_key();
 
@@ -177,6 +235,7 @@ impl ServerCtx {
         Self {
             oauth_http_client,
             oauth_providers,
+            server_url,
             cookie_key,
             jwk_pairs: JwkPairs::default(),
             kv_store,

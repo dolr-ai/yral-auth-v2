@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use axum::{
-    http::HeaderMap,
     response::{IntoResponse, Response},
     Extension, Form, Json,
 };
@@ -21,10 +20,11 @@ use crate::{
     oauth::{
         client_validation::ClientIdValidator,
         jwt::{
-            generate::{generate_access_token_jwt, generate_refresh_token_jwt},
+            generate::{generate_access_token_and_id_token_jwt, generate_refresh_token_jwt},
             AuthCodeClaims, RefreshTokenClaims,
         },
-        AuthGrantQuery, TokenGrantError, TokenGrantErrorKind, TokenGrantRes, TokenGrantResult,
+        AuthGrantQuery, PartialOIDCConfig, TokenGrantError, TokenGrantErrorKind, TokenGrantRes,
+        TokenGrantResult,
     },
     utils::{identity::generate_random_identity_and_save, time::current_epoch},
 };
@@ -65,12 +65,20 @@ impl IntoResponse for TokenGrantResult {
     }
 }
 
+pub async fn handle_well_known_jwks(Extension(ctx): Extension<Arc<ServerCtx>>) -> Response {
+    Json(ctx.jwk_pairs.well_known_jwks.clone()).into_response()
+}
+
+pub async fn handle_oidc_configuration(Extension(ctx): Extension<Arc<ServerCtx>>) -> Response {
+    let jwks_uri = format!("{}/.well-known/jwks.json", ctx.server_url,);
+
+    Json(PartialOIDCConfig { jwks_uri }).into_response()
+}
+
 pub async fn handle_oauth_token_grant(
-    headers: HeaderMap,
     Extension(ctx): Extension<Arc<ServerCtx>>,
     Form(req): Form<AuthGrantQuery>,
 ) -> Response {
-    let host = headers.get("host").unwrap().to_str().unwrap();
     let res = match req {
         AuthGrantQuery::AuthorizationCode {
             code,
@@ -81,7 +89,6 @@ pub async fn handle_oauth_token_grant(
         } => {
             handle_authorization_code_grant(
                 &ctx,
-                host,
                 code,
                 redirect_uri,
                 code_verifier,
@@ -94,11 +101,11 @@ pub async fn handle_oauth_token_grant(
             refresh_token,
             client_id,
             client_secret,
-        } => handle_refresh_token_grant(&ctx, host, refresh_token, client_id, client_secret).await,
+        } => handle_refresh_token_grant(&ctx, refresh_token, client_id, client_secret).await,
         AuthGrantQuery::ClientCredentials {
             client_id,
             client_secret,
-        } => handle_client_credentials_grant(&ctx, host, client_id, client_secret).await,
+        } => handle_client_credentials_grant(&ctx, client_id, client_secret).await,
     };
 
     match res {
@@ -141,7 +148,6 @@ fn delegate_identity(from: &impl Identity) -> DelegatedIdentityWire {
 
 fn generate_access_token_with_identity(
     ctx: &ServerCtx,
-    host: &str,
     identity: Secp256k1Identity,
     client_id: &str,
     nonce: Option<String>,
@@ -150,11 +156,11 @@ fn generate_access_token_with_identity(
     let delegated_identity = delegate_identity(&identity);
     let user_principal = identity.sender().unwrap();
 
-    let access_token = generate_access_token_jwt(
+    let (access_token, id_token) = generate_access_token_and_id_token_jwt(
         &ctx.jwk_pairs.auth_tokens.encoding_key,
         user_principal,
         delegated_identity,
-        host,
+        &ctx.server_url,
         client_id,
         nonce.clone(),
         is_anonymous,
@@ -162,18 +168,17 @@ fn generate_access_token_with_identity(
     let refresh_token = generate_refresh_token_jwt(
         &ctx.jwk_pairs.auth_tokens.encoding_key,
         user_principal,
-        host,
+        &ctx.server_url,
         client_id,
         nonce,
         is_anonymous,
     );
 
-    TokenGrantRes::new(access_token, refresh_token)
+    TokenGrantRes::new(access_token, id_token, refresh_token)
 }
 
 async fn generate_access_token(
     ctx: &ServerCtx,
-    host: &str,
     user_principal: Principal,
     client_id: &str,
     nonce: Option<String>,
@@ -198,14 +203,13 @@ async fn generate_access_token(
     })?;
     let id = Secp256k1Identity::from_private_key(sk);
 
-    let grant = generate_access_token_with_identity(ctx, host, id, client_id, nonce, is_anonymous);
+    let grant = generate_access_token_with_identity(ctx, id, client_id, nonce, is_anonymous);
 
     Ok(grant)
 }
 
 async fn handle_authorization_code_grant(
     ctx: &ServerCtx,
-    host: &str,
     code: String,
     redirect_uri: Url,
     code_verifier: String,
@@ -216,7 +220,7 @@ async fn handle_authorization_code_grant(
 
     let mut validation = jsonwebtoken::Validation::new(jsonwebtoken::Algorithm::EdDSA);
     validation.set_audience(&[&client_id]);
-    validation.set_issuer(&[host]);
+    validation.set_issuer(&[&ctx.server_url]);
 
     let auth_code = jsonwebtoken::decode::<AuthCodeClaims>(
         &code,
@@ -248,7 +252,6 @@ async fn handle_authorization_code_grant(
 
     let grant = generate_access_token(
         ctx,
-        host,
         code_claims.sub,
         &client_id,
         code_claims.nonce.clone(),
@@ -261,7 +264,6 @@ async fn handle_authorization_code_grant(
 
 async fn handle_refresh_token_grant(
     ctx: &ServerCtx,
-    host: &str,
     refresh_token: String,
     client_id: String,
     client_secret: Option<String>,
@@ -270,7 +272,7 @@ async fn handle_refresh_token_grant(
 
     let mut validation = jsonwebtoken::Validation::new(jsonwebtoken::Algorithm::EdDSA);
     validation.set_audience(&[&client_id]);
-    validation.set_issuer(&[host]);
+    validation.set_issuer(&[&ctx.server_url]);
 
     let refresh_token = jsonwebtoken::decode::<RefreshTokenClaims>(
         &refresh_token,
@@ -286,7 +288,6 @@ async fn handle_refresh_token_grant(
 
     let grant = generate_access_token(
         ctx,
-        host,
         refresh_claims.sub,
         &client_id,
         None,
@@ -299,7 +300,6 @@ async fn handle_refresh_token_grant(
 
 async fn handle_client_credentials_grant(
     ctx: &ServerCtx,
-    host: &str,
     client_id: String,
     client_secret: Option<String>,
 ) -> Result<TokenGrantRes, TokenGrantError> {
@@ -312,7 +312,7 @@ async fn handle_client_credentials_grant(
             error_description: e.to_string(),
         })?;
 
-    let grant = generate_access_token_with_identity(ctx, host, identity, &client_id, None, true);
+    let grant = generate_access_token_with_identity(ctx, identity, &client_id, None, true);
 
     Ok(grant)
 }

@@ -35,7 +35,7 @@ hex = { version = "0.4.3", optional = true}
 log = "0.4.27"
 simple_logger = { version = "4.0", optional = true }
 dotenvy = { version = "0.15.7", optional = true }
-jsonwebtoken = { version = "9.3.1", optional = true }
+jsonwebtoken = { version = "9.3.1" }
 candid = { version = "0.10.13" }
 serde_json = { version = "1.0.140" }
 redis = { version = "0.25.2", features = [
@@ -55,6 +55,7 @@ ic-agent = { version = "0.38.1", default-features = false }
 rand = { version = "0.8.5", optional = true }
 web-time = "1.1.0"
 yral-identity = { git = "https://github.com/yral-dapp/yral-identity.git", rev = "adbf4be5cb62a26f2a90032261321bf1df33f08b", default-features = false }
+p256 = { version = "0.13.2", features = ["pkcs8"], optional = true }
 
 [features]
 redis-kv = []
@@ -76,7 +77,6 @@ ssr = [
     "dep:hex",
     "dep:simple_logger",
     "dep:dotenvy",
-    "dep:jsonwebtoken",
     "dep:bb8",
     "dep:bb8-redis",
     "dep:redb",
@@ -85,6 +85,7 @@ ssr = [
     "dep:k256",
     "dep:rand",
     "yral-identity/ic-git",
+    "dep:p256"
 ]
 release-lib = ["hydrate"]
 release-bin = ["ssr", "redis-kv"]

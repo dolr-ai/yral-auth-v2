@@ -11,7 +11,9 @@ use axum::{
 use leptos::{config::get_configuration, logging::log, prelude::provide_context};
 use leptos_axum::{generate_route_list, handle_server_fns_with_context, LeptosRoutes};
 use yral_auth_v2::{
-    api::server_impl::handle_oauth_token_grant,
+    api::server_impl::{
+        handle_oauth_token_grant, handle_oidc_configuration, handle_well_known_jwks,
+    },
     app::{shell, App},
     context::server::{ServerCtx, ServerState},
 };
@@ -42,6 +44,17 @@ async fn leptos_routes_handler(state: State<ServerState>, req: Request<AxumBody>
     handler(state, req).await.into_response()
 }
 
+fn server_routes(ctx: Arc<ServerCtx>) -> Router {
+    Router::new()
+        .route("/oauth/token", post(handle_oauth_token_grant))
+        .route("/.well-known/jwks.json", get(handle_well_known_jwks))
+        .route(
+            "/.well-known/openid-configuration",
+            get(handle_oidc_configuration),
+        )
+        .layer(Extension(ctx))
+}
+
 #[tokio::main]
 async fn main() {
     simple_logger::init_with_level(log::Level::Debug).expect("couldn't initialize logging");
@@ -54,24 +67,22 @@ async fn main() {
 
     dotenvy::dotenv().ok();
 
+    let ctx = Arc::new(ServerCtx::new().await);
     let app_state = ServerState {
         leptos_options,
         routes: routes.clone(),
-        ctx: Arc::new(ServerCtx::new().await),
+        ctx: ctx.clone(),
     };
 
     let app = Router::new()
-        .route(
-            "/oauth/token",
-            post(handle_oauth_token_grant).layer(Extension(app_state.ctx.clone())),
-        )
         .route(
             "/api/*fn_name",
             get(server_fn_handler).post(server_fn_handler),
         )
         .leptos_routes_with_handler(routes, get(leptos_routes_handler))
         .fallback(leptos_axum::file_and_error_handler::<ServerState, _>(shell))
-        .with_state(app_state);
+        .with_state(app_state)
+        .merge(server_routes(ctx));
 
     // run our app with hyper
     // `axum::Server` is a re-export of `hyper::Server`
