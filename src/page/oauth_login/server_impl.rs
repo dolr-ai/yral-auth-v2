@@ -1,10 +1,7 @@
 use ic_agent::Identity;
 use web_time::Duration;
 
-use axum::{
-    http::{header, HeaderMap},
-    response::IntoResponse,
-};
+use axum::{http::header, response::IntoResponse};
 use axum_extra::extract::{
     cookie::{Cookie, SameSite},
     PrivateCookieJar,
@@ -12,7 +9,7 @@ use axum_extra::extract::{
 use base64::{prelude::BASE64_URL_SAFE, Engine};
 use candid::Principal;
 use leptos::prelude::{expect_context, ServerFnError};
-use leptos_axum::{extract, extract_with_state, ResponseOptions};
+use leptos_axum::{extract_with_state, ResponseOptions};
 use openidconnect::{
     core::CoreAuthenticationFlow, AuthorizationCode, CsrfToken, Nonce, PkceCodeChallenge,
     PkceCodeVerifier,
@@ -210,13 +207,10 @@ async fn generate_oauth_login_code(
         .await?
     };
 
-    let headers: HeaderMap = extract().await.unwrap();
-    let host = headers.get("host").unwrap();
-
     let code_grant = generate_code_grant_jwt(
         &ctx.jwk_pairs.auth_tokens.encoding_key,
         principal,
-        host.to_str().unwrap(),
+        &ctx.server_url,
         query,
     );
 

@@ -11,7 +11,7 @@ use crate::{
 pub fn generate_code_grant_jwt(
     encoding_key: &jsonwebtoken::EncodingKey,
     user_principal: Principal,
-    host: &str,
+    server_url: &str,
     query: AuthQuery,
 ) -> String {
     let iat = current_epoch_secs();
@@ -22,7 +22,7 @@ pub fn generate_code_grant_jwt(
             aud: query.client_id.clone(),
             iat,
             exp: iat + 10 * 60,
-            iss: host.to_string(),
+            iss: server_url.to_string(),
             sub: user_principal,
             ext_redirect_uri: query.redirect_uri,
             nonce: query.nonce,
