@@ -218,7 +218,7 @@ async fn handle_authorization_code_grant(
 ) -> Result<TokenGrantRes, TokenGrantError> {
     verify_client_secret(ctx, &client_id, client_secret, Some(&redirect_uri)).await?;
 
-    let mut validation = jsonwebtoken::Validation::new(jsonwebtoken::Algorithm::EdDSA);
+    let mut validation = jsonwebtoken::Validation::new(jsonwebtoken::Algorithm::ES256);
     validation.set_audience(&[&client_id]);
     validation.set_issuer(&[&ctx.server_url]);
 
@@ -270,7 +270,7 @@ async fn handle_refresh_token_grant(
 ) -> Result<TokenGrantRes, TokenGrantError> {
     verify_client_secret(ctx, &client_id, client_secret, None).await?;
 
-    let mut validation = jsonwebtoken::Validation::new(jsonwebtoken::Algorithm::EdDSA);
+    let mut validation = jsonwebtoken::Validation::new(jsonwebtoken::Algorithm::ES256);
     validation.set_audience(&[&client_id]);
     validation.set_issuer(&[&ctx.server_url]);
 
