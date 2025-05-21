@@ -17,7 +17,7 @@ pub fn generate_code_grant_jwt(
     let iat = current_epoch_secs();
 
     jsonwebtoken::encode(
-        &jsonwebtoken::Header::new(jsonwebtoken::Algorithm::EdDSA),
+        &jwt_header(),
         &AuthCodeClaims {
             aud: query.client_id.clone(),
             iat,
