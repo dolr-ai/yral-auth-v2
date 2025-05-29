@@ -1,13 +1,15 @@
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 
 use crate::error::AuthErrorKind;
 use enum_dispatch::enum_dispatch;
+use regex::Regex;
 use url::Url;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum OAuthClientType {
     Web,
     Native,
+    Preview,
 }
 
 #[derive(Debug, Clone)]
@@ -27,6 +29,36 @@ pub(crate) trait ClientIdValidator {
         redirect_uri: &Url,
     ) -> Result<(), AuthErrorKind> {
         let client = self.lookup_client(client_id).await?;
+        self.validate_redirect_uri(client, Some(redirect_uri))?;
+
+        Ok(())
+    }
+
+    fn validate_redirect_uri(
+        &self,
+        client: &OAuthClient,
+        redirect_uri: Option<&Url>,
+    ) -> Result<(), AuthErrorKind> {
+        let Some(redirect_uri) = redirect_uri else {
+            return Ok(());
+        };
+
+        if client.client_type == OAuthClientType::Preview {
+            static PR_PREVIEW_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
+                Regex::new(r"^(https:\/\/)?pr-\d*-dolr-ai-hot-or-not-web-leptos-ssr\.fly\.dev$")
+                    .unwrap()
+            });
+
+            let valid = PR_PREVIEW_PATTERN.is_match_at(redirect_uri.as_str(), 0);
+            if valid {
+                return Ok(());
+            } else {
+                return Err(AuthErrorKind::UnauthorizedRedirectUri(
+                    redirect_uri.to_string(),
+                ));
+            }
+        }
+
         if !client.redirect_urls.contains(redirect_uri) {
             return Err(AuthErrorKind::UnauthorizedRedirectUri(
                 redirect_uri.to_string(),
@@ -47,13 +79,7 @@ pub(crate) trait ClientIdValidator {
         use crate::oauth::jwt::ClientSecretClaims;
 
         let client = self.lookup_client(client_id).await?;
-        if let Some(redirect_uri) = redirect_uri {
-            if !client.redirect_urls.contains(redirect_uri) {
-                return Err(AuthErrorKind::UnauthorizedRedirectUri(
-                    redirect_uri.to_string(),
-                ));
-            }
-        }
+        self.validate_redirect_uri(client, redirect_uri)?;
 
         if client.client_type == OAuthClientType::Native {
             return Ok(());
@@ -119,6 +145,11 @@ impl Default for ConstClientIdValidator {
                     client_id: "c89b29de-8366-4e62-9b9e-c29585740acf".to_string(),
                     redirect_urls: vec!["yral://oauth/callback".parse().unwrap()],
                     client_type: OAuthClientType::Native,
+                },
+                OAuthClient {
+                    client_id: "5c86a459-493d-463e-965d-be6ed74f3e5f".to_string(),
+                    redirect_urls: vec![],
+                    client_type: OAuthClientType::Preview,
                 },
             ],
         }
