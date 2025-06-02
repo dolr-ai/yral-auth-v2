@@ -141,15 +141,28 @@ impl Default for ConstClientIdValidator {
                     ],
                     client_type: OAuthClientType::Web,
                 },
+                // Yral Android
                 OAuthClient {
                     client_id: "c89b29de-8366-4e62-9b9e-c29585740acf".to_string(),
                     redirect_urls: vec!["yral://oauth/callback".parse().unwrap()],
                     client_type: OAuthClientType::Native,
                 },
+                // Yral Previews
                 OAuthClient {
                     client_id: "5c86a459-493d-463e-965d-be6ed74f3e5f".to_string(),
                     redirect_urls: vec![],
                     client_type: OAuthClientType::Preview,
+                },
+                // Yral & Yral Staging
+                OAuthClient {
+                    client_id: "4ec00561-91bb-4e60-9743-8bed684145ba".to_string(),
+                    redirect_urls: vec![
+                        "https://yral.com/auth/google_redirect".parse().unwrap(),
+                        "https://hot-or-not-web-leptos-ssr-staging.fly.dev/auth/google_redirect"
+                            .parse()
+                            .unwrap(),
+                    ],
+                    client_type: OAuthClientType::Web,
                 },
             ],
         }
