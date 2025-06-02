@@ -45,7 +45,7 @@ pub(crate) trait ClientIdValidator {
 
         if client.client_type == OAuthClientType::Preview {
             static PR_PREVIEW_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
-                Regex::new(r"^(https:\/\/)?pr-\d*-dolr-ai-hot-or-not-web-leptos-ssr\.fly\.dev$")
+                Regex::new(r"^(https:\/\/)?pr-\d*-dolr-ai-hot-or-not-web-leptos-ssr\.fly\.dev\/auth\/google_redirect$")
                     .unwrap()
             });
 
