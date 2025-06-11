@@ -12,14 +12,12 @@ use openidconnect::{
 use p256::pkcs8::DecodePublicKey;
 
 use crate::{
-    consts::{APPLE_ISSUER_URL, AUTH_TOKEN_KID, GOOGLE_ISSUER_URL},
+    consts::{AUTH_TOKEN_KID, GOOGLE_ISSUER_URL},
     kv::KVStoreImpl,
     oauth::{
         client_validation::ClientIdValidatorImpl, jwt::JsonWebKeySet, SupportedOAuthProviders,
     },
-    oauth_provider::{
-        AppleOAuthProvider, IdentityOAuthProvider, OAuthProviderImpl, StdOAuthClient,
-    },
+    oauth_provider::{IdentityOAuthProvider, OAuthProviderImpl, StdOAuthClient},
 };
 
 #[derive(FromRef, Clone)]
@@ -166,12 +164,12 @@ impl ServerCtx {
         oauth_providers.insert(SupportedOAuthProviders::Google, google_oauth.into());
 
         // Apple OAuth
-        let apple_team_id = env::var("APPLE_TEAM_ID").expect("`APPLE_TEAM_ID` is required!");
-        let apple_key_id = env::var("APPLE_KEY_ID").expect("`APPLE_KEY_ID` is required!");
-        let apple_auth_key =
-            env::var("APPLE_AUTH_KEY_PEM").expect("`APPLE_AUTH_KEY_PEM` is required!");
-        let apple_auth_key = jsonwebtoken::EncodingKey::from_ec_pem(apple_auth_key.as_bytes())
-            .expect("invalid `APPLE_AUTH_KEY_PEM`");
+        // let apple_team_id = env::var("APPLE_TEAM_ID").expect("`APPLE_TEAM_ID` is required!");
+        // let apple_key_id = env::var("APPLE_KEY_ID").expect("`APPLE_KEY_ID` is required!");
+        // let apple_auth_key =
+        //     env::var("APPLE_AUTH_KEY_PEM").expect("`APPLE_AUTH_KEY_PEM` is required!");
+        // let apple_auth_key = jsonwebtoken::EncodingKey::from_ec_pem(apple_auth_key.as_bytes())
+        //     .expect("invalid `APPLE_AUTH_KEY_PEM`");
 
         // let apple_oauth = Self::init_oauth_client(
         //     "APPLE_CLIENT_ID",
