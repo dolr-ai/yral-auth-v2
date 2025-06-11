@@ -7,10 +7,17 @@ use std::{
 };
 
 use enum_dispatch::enum_dispatch;
-use openidconnect::ClientSecret;
+use openidconnect::{
+    core::{CoreIdToken, CoreIdTokenClaims},
+    ClientSecret, Nonce,
+};
 use serde::{Deserialize, Serialize};
 
-use crate::utils::time::current_epoch;
+use crate::{
+    consts::{APPLE_ISSUER_URL, APPLE_ISSUER_URL2},
+    error::AuthErrorKind,
+    utils::time::current_epoch,
+};
 
 pub type StdOAuthClient = openidconnect::Client<
     openidconnect::EmptyAdditionalClaims,
@@ -47,6 +54,16 @@ pub type StdOAuthClient = openidconnect::Client<
 #[enum_dispatch]
 pub(crate) trait OAuthProvider {
     fn get_client(&self) -> Arc<StdOAuthClient>;
+
+    fn verify_id_token<'a>(
+        &self,
+        client: &StdOAuthClient,
+        token: &'a CoreIdToken,
+    ) -> Result<&'a CoreIdTokenClaims, AuthErrorKind>;
+}
+
+fn no_op_nonce_verifier(_: Option<&Nonce>) -> Result<(), String> {
+    Ok(())
 }
 
 pub struct IdentityOAuthProvider(Arc<StdOAuthClient>);
@@ -60,6 +77,16 @@ impl IdentityOAuthProvider {
 impl OAuthProvider for IdentityOAuthProvider {
     fn get_client(&self) -> Arc<StdOAuthClient> {
         self.0.clone()
+    }
+
+    fn verify_id_token<'a>(
+        &self,
+        client: &StdOAuthClient,
+        token: &'a CoreIdToken,
+    ) -> Result<&'a CoreIdTokenClaims, AuthErrorKind> {
+        token
+            .claims(&client.id_token_verifier(), no_op_nonce_verifier)
+            .map_err(AuthErrorKind::unexpected)
     }
 }
 
@@ -178,6 +205,26 @@ impl OAuthProvider for AppleOAuthProvider {
             .store(expiry_epoch, Ordering::Release);
 
         new_client
+    }
+
+    fn verify_id_token<'a>(
+        &self,
+        client: &StdOAuthClient,
+        token: &'a CoreIdToken,
+    ) -> Result<&'a CoreIdTokenClaims, AuthErrorKind> {
+        let verifier = client.id_token_verifier().require_issuer_match(false);
+        let claims = token
+            .claims(&verifier, no_op_nonce_verifier)
+            .map_err(AuthErrorKind::unexpected)?;
+
+        let iss = claims.issuer().as_str();
+        if iss != APPLE_ISSUER_URL2 || iss != APPLE_ISSUER_URL {
+            return Err(AuthErrorKind::Unexpected(format!(
+                "Apple ID token issuer mismatch: {iss}"
+            )));
+        }
+
+        Ok(claims)
     }
 }
 

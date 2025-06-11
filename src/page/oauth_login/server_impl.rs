@@ -108,10 +108,6 @@ pub async fn get_oauth_url_impl(
     Ok(auth_url.to_string())
 }
 
-fn no_op_nonce_verifier(_: Option<&Nonce>) -> Result<(), String> {
-    Ok(())
-}
-
 fn principal_lookup_key(provider: SupportedOAuthProviders, sub_id: &str) -> String {
     format!("{provider}-login-{sub_id}")
 }
@@ -166,11 +162,11 @@ async fn generate_oauth_login_code(
     query: AuthQuery,
 ) -> Result<String, AuthErrorKind> {
     let ctx = expect_server_ctx();
-    let oauth2 = ctx
+    let oauth_impl = ctx
         .oauth_providers
         .get(&provider)
-        .ok_or_else(|| AuthErrorKind::unexpected(format!("provider unavailable: {provider}")))?
-        .get_client();
+        .ok_or_else(|| AuthErrorKind::unexpected(format!("provider unavailable: {provider}")))?;
+    let oauth2 = oauth_impl.get_client();
 
     let token_res = oauth2
         .exchange_code(AuthorizationCode::new(code))
@@ -186,9 +182,7 @@ async fn generate_oauth_login_code(
         .ok_or_else(|| AuthErrorKind::unexpected("Google did not return an ID token"))?;
 
     // we don't use a nonce
-    let claims = id_token
-        .claims(&oauth2.id_token_verifier(), no_op_nonce_verifier)
-        .map_err(AuthErrorKind::unexpected)?;
+    let claims = oauth_impl.verify_id_token(&oauth2, id_token)?;
     let sub_id = claims.subject();
 
     let maybe_principal = try_extract_principal_from_oauth_sub(provider, &ctx.kv_store, sub_id)
