@@ -113,7 +113,7 @@ impl AppleClientSecretGen {
             iss: self.team_id.clone(),
             iat: iat.as_secs(),
             exp: exp.as_secs(),
-            aud: "https://account.apple.com".to_string(),
+            aud: "https://appleid.apple.com".to_string(),
             sub: self.client_id.clone(),
         };
         let mut token_header = jsonwebtoken::Header::new(jsonwebtoken::Algorithm::ES256);
