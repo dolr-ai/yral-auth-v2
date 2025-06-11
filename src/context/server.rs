@@ -173,17 +173,17 @@ impl ServerCtx {
         let apple_auth_key = jsonwebtoken::EncodingKey::from_ec_pem(apple_auth_key.as_bytes())
             .expect("invalid `APPLE_AUTH_KEY_PEM`");
 
-        // let apple_oauth = Self::init_oauth_client(
-        //     "APPLE_CLIENT_ID",
-        //     IssuerUrl::new(APPLE_ISSUER_URL.to_string()).unwrap(),
-        //     redirect_uri.clone(),
-        //     http_client,
-        // )
-        // .await;
-        // let apple_oauth =
-        //     AppleOAuthProvider::new(apple_oauth, apple_auth_key, apple_key_id, apple_team_id);
+        let apple_oauth = Self::init_oauth_client(
+            "APPLE_CLIENT_ID",
+            IssuerUrl::new(APPLE_ISSUER_URL.to_string()).unwrap(),
+            redirect_uri.clone(),
+            http_client,
+        )
+        .await;
+        let apple_oauth =
+            AppleOAuthProvider::new(apple_oauth, apple_auth_key, apple_key_id, apple_team_id);
 
-        // oauth_providers.insert(SupportedOAuthProviders::Apple, apple_oauth.into());
+        oauth_providers.insert(SupportedOAuthProviders::Apple, apple_oauth.into());
 
         oauth_providers
     }
