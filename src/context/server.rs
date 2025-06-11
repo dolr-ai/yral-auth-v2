@@ -128,29 +128,27 @@ impl ServerCtx {
         issuer_url: IssuerUrl,
         redirect_url: RedirectUrl,
         http_client: &reqwest::Client,
-    ) -> StdOAuthClient {
+    ) -> Result<StdOAuthClient, String> {
         let client_id =
             env::var(client_id_env).unwrap_or_else(|_| panic!("`{client_id_env}` is required!"));
 
         let oauth_metadata = CoreProviderMetadata::discover_async(issuer_url, http_client)
             .await
-            .unwrap();
+            .map_err(|e| format!("Failed to discover OAuth metadata: {e}"))?;
 
-        CoreClient::from_provider_metadata(oauth_metadata, ClientId::new(client_id), None)
-            .set_redirect_uri(redirect_url)
-            .set_auth_type(openidconnect::AuthType::RequestBody)
+        let client =
+            CoreClient::from_provider_metadata(oauth_metadata, ClientId::new(client_id), None)
+                .set_redirect_uri(redirect_url)
+                .set_auth_type(openidconnect::AuthType::RequestBody);
+
+        Ok(client)
     }
 
-    async fn init_oauth_providers(
+    async fn init_google_oauth_client(
         http_client: &reqwest::Client,
-        server_url: &str,
-    ) -> HashMap<SupportedOAuthProviders, OAuthProviderImpl> {
-        let mut oauth_providers = HashMap::new();
-
-        let redirect_uri = format!("{server_url}/oauth_callback");
-        let redirect_uri = RedirectUrl::new(redirect_uri).expect("Invalid `SERVER_URL`");
-
-        // Google OAuth
+        redirect_uri: &RedirectUrl,
+        oauth_providers: &mut HashMap<SupportedOAuthProviders, OAuthProviderImpl>,
+    ) -> Result<(), String> {
         let google_client_secret =
             env::var("GOOGLE_CLIENT_SECRET").expect("`GOOGLE_CLIENT_SECRET` is required!");
 
@@ -160,12 +158,20 @@ impl ServerCtx {
             redirect_uri.clone(),
             http_client,
         )
-        .await
+        .await?
         .set_client_secret(ClientSecret::new(google_client_secret));
+
         let google_oauth = IdentityOAuthProvider::new(google_oauth);
         oauth_providers.insert(SupportedOAuthProviders::Google, google_oauth.into());
 
-        // Apple OAuth
+        Ok(())
+    }
+
+    async fn init_apple_oauth_client(
+        http_client: &reqwest::Client,
+        redirect_uri: &RedirectUrl,
+        oauth_providers: &mut HashMap<SupportedOAuthProviders, OAuthProviderImpl>,
+    ) -> Result<(), String> {
         let apple_team_id = env::var("APPLE_TEAM_ID").expect("`APPLE_TEAM_ID` is required!");
         let apple_key_id = env::var("APPLE_KEY_ID").expect("`APPLE_KEY_ID` is required!");
         let apple_auth_key =
@@ -179,11 +185,37 @@ impl ServerCtx {
             redirect_uri.clone(),
             http_client,
         )
-        .await;
+        .await?;
         let apple_oauth =
             AppleOAuthProvider::new(apple_oauth, apple_auth_key, apple_key_id, apple_team_id);
 
         oauth_providers.insert(SupportedOAuthProviders::Apple, apple_oauth.into());
+
+        Ok(())
+    }
+
+    async fn init_oauth_providers(
+        http_client: &reqwest::Client,
+        server_url: &str,
+    ) -> HashMap<SupportedOAuthProviders, OAuthProviderImpl> {
+        let mut oauth_providers = HashMap::new();
+
+        let redirect_uri = format!("{server_url}/oauth_callback");
+        let redirect_uri = RedirectUrl::new(redirect_uri).expect("Invalid `SERVER_URL`");
+
+        // Google OAuth
+        if let Err(e) =
+            Self::init_google_oauth_client(http_client, &redirect_uri, &mut oauth_providers).await
+        {
+            log::error!("Failed to initialize Google OAuth: {e}, ignoring");
+        }
+
+        // Apple OAuth
+        if let Err(e) =
+            Self::init_apple_oauth_client(http_client, &redirect_uri, &mut oauth_providers).await
+        {
+            log::error!("Failed to initialize Apple OAuth: {e}, ignoring");
+        }
 
         oauth_providers
     }

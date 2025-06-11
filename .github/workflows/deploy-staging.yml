@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - fix/apple-issuer-url
+      - staging
 
 jobs:
   build_check:
