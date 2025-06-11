@@ -1,12 +1,12 @@
 use std::{collections::HashMap, env, sync::Arc};
 
-use axum::extract::FromRef;
+use axum::{extract::FromRef, http::header::ACCEPT};
 use base64::{prelude::BASE64_URL_SAFE_NO_PAD, Engine};
 use jsonwebtoken::jwk::{self, Jwk};
 use leptos::{config::LeptosOptions, prelude::expect_context};
 use leptos_axum::AxumRouteListing;
 use openidconnect::{
-    core::{CoreClient, CoreProviderMetadata},
+    core::{CoreClient, CoreJsonWebKeySet, CoreProviderMetadata},
     reqwest, ClientId, ClientSecret, IssuerUrl, RedirectUrl,
 };
 use p256::pkcs8::DecodePublicKey;
@@ -179,13 +179,31 @@ impl ServerCtx {
         let apple_auth_key = jsonwebtoken::EncodingKey::from_ec_pem(apple_auth_key.as_bytes())
             .expect("invalid `APPLE_AUTH_KEY_PEM`");
 
-        let apple_oauth = Self::init_oauth_client(
-            "APPLE_CLIENT_ID",
-            IssuerUrl::new(APPLE_ISSUER_URL.to_string()).unwrap(),
-            redirect_uri.clone(),
-            http_client,
-        )
-        .await?;
+        let client_id = env::var("APPLE_CLIENT_ID").expect("`APPLE_CLIENT_ID` is required!");
+
+        let iss = IssuerUrl::new(APPLE_ISSUER_URL.to_string()).unwrap();
+
+        let well_known_url = iss.join(".well-known/openid-configuration").unwrap();
+
+        let mut metadata = http_client
+            .get(well_known_url)
+            .header(ACCEPT, "appplication/json")
+            .send()
+            .await
+            .map_err(|e| format!("{e}"))?
+            .json::<CoreProviderMetadata>()
+            .await
+            .map_err(|e| format!("{e}"))?;
+        let jwks = CoreJsonWebKeySet::fetch_async(metadata.jwks_uri(), http_client)
+            .await
+            .map_err(|e| format!("{e}"))?;
+        metadata = metadata.set_jwks(jwks);
+
+        let apple_oauth =
+            CoreClient::from_provider_metadata(metadata, ClientId::new(client_id), None)
+                .set_redirect_uri(redirect_uri.clone())
+                .set_auth_type(openidconnect::AuthType::RequestBody);
+
         let apple_oauth =
             AppleOAuthProvider::new(apple_oauth, apple_auth_key, apple_key_id, apple_team_id);
 
