@@ -218,7 +218,7 @@ impl OAuthProvider for AppleOAuthProvider {
             .map_err(AuthErrorKind::unexpected)?;
 
         let iss = claims.issuer().as_str();
-        if iss != APPLE_ISSUER_URL2 || iss != APPLE_ISSUER_URL {
+        if !(iss == APPLE_ISSUER_URL2 || iss == APPLE_ISSUER_URL) {
             return Err(AuthErrorKind::Unexpected(format!(
                 "Apple ID token issuer mismatch: {iss}"
             )));
