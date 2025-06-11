@@ -169,7 +169,7 @@ async fn generate_oauth_login_code(
     let oauth2 = ctx
         .oauth_providers
         .get(&provider)
-        .ok_or_else(|| AuthErrorKind::unexpected("unsupported provider"))?
+        .ok_or_else(|| AuthErrorKind::unexpected(format!("provider unavailable: {provider}")))?
         .get_client();
 
     let token_res = oauth2
