@@ -62,4 +62,17 @@ impl KVStore for ReDBKV {
         .await
         .unwrap()
     }
+
+    async fn has_key(&self, key: String) -> Result<bool, KVError> {
+        self.spawn_blocking(move |db| {
+            let read_txn = db.begin_read()?;
+            let has_key = {
+                let table = read_txn.open_table(TABLE)?;
+                table.get(key.as_str())?.is_some()
+            };
+            Ok(has_key)
+        })
+        .await
+        .unwrap()
+    }
 }

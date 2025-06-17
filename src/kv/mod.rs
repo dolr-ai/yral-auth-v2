@@ -21,6 +21,7 @@ pub enum KVError {
 pub(crate) trait KVStore: Send {
     async fn read(&self, key: String) -> Result<Option<String>, KVError>;
     async fn write(&self, key: String, value: String) -> Result<(), KVError>;
+    async fn has_key(&self, key: String) -> Result<bool, KVError>;
 }
 
 #[derive(Clone)]
