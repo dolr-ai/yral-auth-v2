@@ -241,6 +241,8 @@ pub enum TokenGrantErrorKind {
     InvalidScope,
     #[serde(rename = "server_error")]
     ServerError,
+    #[serde(rename = "principal_not_found")]
+    PrincipalNotFound,
 }
 
 impl TokenGrantErrorKind {
@@ -256,6 +258,7 @@ impl TokenGrantErrorKind {
             Self::UnsupportedGrantType => StatusCode::BAD_REQUEST,
             Self::InvalidScope => StatusCode::BAD_REQUEST,
             Self::ServerError => StatusCode::INTERNAL_SERVER_ERROR,
+            Self::PrincipalNotFound => StatusCode::NOT_FOUND,
         }
     }
 }
