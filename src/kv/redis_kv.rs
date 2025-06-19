@@ -27,4 +27,10 @@ impl KVStore for RedisKV {
         con.hset::<_, _, _, ()>(key, AUTH_FIELD, value).await?;
         Ok(())
     }
+
+    async fn has_key(&self, key: String) -> Result<bool, KVError> {
+        let mut con = self.0.get().await?;
+        let exists: bool = con.exists(key).await?;
+        Ok(exists)
+    }
 }

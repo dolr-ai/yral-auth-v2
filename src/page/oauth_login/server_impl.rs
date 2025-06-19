@@ -122,7 +122,12 @@ async fn try_extract_principal_from_oauth_sub(
         return Ok(None);
     };
 
-    Ok(Some(principal_str))
+    // TODO: remove this after spacetime migration and handling
+    if kv.has_key(principal_str.clone()).await? {
+        Ok(Some(principal_str))
+    } else {
+        Ok(None)
+    }
 }
 
 async fn principal_from_login_hint_or_generate_and_save(
