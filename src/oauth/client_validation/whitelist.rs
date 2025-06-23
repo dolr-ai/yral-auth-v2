@@ -64,6 +64,18 @@ pub fn default_oauth_clients() -> HashMap<String, OAuthClient> {
             ],
             OAuthClientType::Web
         },
+        // Off-chain agent
+        {
+            "02c8a862-5696-4f36-b0e7-c39edd4f34ea",
+            [],
+            OAuthClientType::BackendService
+        },
+        // Yral SSR Backend
+        {
+            "f3a7872f-55f9-4ca7-8fec-9a5d20356248",
+            [],
+            OAuthClientType::BackendService
+        },
     };
 
     oauth_clients

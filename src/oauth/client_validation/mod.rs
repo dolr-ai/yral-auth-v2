@@ -21,6 +21,7 @@ use url::Url;
 use web_time::Duration;
 
 pub struct ValidationRes {
+    pub kind: OAuthClientType,
     pub access_max_age: Duration,
     pub refresh_max_age: Duration,
 }
@@ -29,10 +30,12 @@ impl From<OAuthClientType> for ValidationRes {
     fn from(client_type: OAuthClientType) -> Self {
         match client_type {
             OAuthClientType::BackendService => Self {
+                kind: client_type,
                 access_max_age: BACKEND_ACCESS_TOKEN_MAX_AGE,
                 refresh_max_age: BACKEND_REFRESH_TOKEN_MAX_AGE,
             },
             _ => Self {
+                kind: client_type,
                 access_max_age: ACCESS_TOKEN_MAX_AGE,
                 refresh_max_age: REFRESH_TOKEN_MAX_AGE,
             },

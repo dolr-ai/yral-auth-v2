@@ -18,7 +18,7 @@ use crate::{
     context::server::ServerCtx,
     kv::KVStore,
     oauth::{
-        client_validation::{ClientIdValidator, ValidationRes},
+        client_validation::{ClientIdValidator, OAuthClientType, ValidationRes},
         jwt::{
             generate::{generate_access_token_and_id_token_jwt, generate_refresh_token_jwt},
             AuthCodeClaims, RefreshTokenClaims,
@@ -310,12 +310,64 @@ async fn handle_refresh_token_grant(
     Ok(grant)
 }
 
+fn backend_service_principal_lookup_key(client_id: &str) -> String {
+    format!("internal-login-{client_id}")
+}
+
+async fn client_credentials_grant_for_backend(
+    ctx: &ServerCtx,
+    client_id: String,
+    res: ValidationRes,
+) -> Result<TokenGrantRes, TokenGrantError> {
+    let internal_key = backend_service_principal_lookup_key(&client_id);
+    let princ_res = ctx
+        .kv_store
+        .read(internal_key.clone())
+        .await
+        .map_err(|e| TokenGrantError {
+            error: TokenGrantErrorKind::ServerError,
+            error_description: e.to_string(),
+        })?
+        .map(Principal::from_text)
+        .transpose()
+        .map_err(|_| TokenGrantError {
+            error: TokenGrantErrorKind::ServerError,
+            error_description: "Invalid principal in KV".to_string(),
+        })?;
+
+    if let Some(principal) = princ_res {
+        return generate_access_token(ctx, principal, &client_id, None, false, res).await;
+    }
+
+    let identity = generate_random_identity_and_save(&ctx.kv_store)
+        .await
+        .map_err(|e| TokenGrantError {
+            error: TokenGrantErrorKind::ServerError,
+            error_description: e.to_string(),
+        })?;
+    let principal = identity.sender().unwrap();
+    ctx.kv_store
+        .write(internal_key, principal.to_text())
+        .await
+        .map_err(|e| TokenGrantError {
+            error: TokenGrantErrorKind::ServerError,
+            error_description: e.to_string(),
+        })?;
+
+    let grant = generate_access_token_with_identity(ctx, identity, &client_id, None, false, res);
+
+    Ok(grant)
+}
+
 async fn handle_client_credentials_grant(
     ctx: &ServerCtx,
     client_id: String,
     client_secret: Option<String>,
 ) -> Result<TokenGrantRes, TokenGrantError> {
     let validation_res = verify_client_secret(ctx, &client_id, client_secret, None).await?;
+    if validation_res.kind == OAuthClientType::BackendService {
+        return client_credentials_grant_for_backend(ctx, client_id, validation_res).await;
+    }
 
     let identity = generate_random_identity_and_save(&ctx.kv_store)
         .await
