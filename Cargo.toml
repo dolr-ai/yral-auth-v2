@@ -57,6 +57,7 @@ web-time = "1.1.0"
 yral-identity = { git = "https://github.com/yral-dapp/yral-identity.git", rev = "adbf4be5cb62a26f2a90032261321bf1df33f08b", default-features = false }
 p256 = { version = "0.13.2", features = ["pkcs8"], optional = true }
 regex = "1.11.1"
+phf = { version = "0.12", features = ["macros"] }
 
 [features]
 redis-kv = []
