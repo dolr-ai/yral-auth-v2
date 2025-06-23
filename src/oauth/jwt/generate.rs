@@ -1,12 +1,10 @@
+use web_time::Duration;
+
 use candid::Principal;
 use yral_types::delegated_identity::DelegatedIdentityWire;
 
 use super::{AccessTokenClaims, AuthCodeClaims, IdTokenClaims, RefreshTokenClaims};
-use crate::{
-    consts::{ACCESS_TOKEN_MAX_AGE, AUTH_TOKEN_KID, REFRESH_TOKEN_MAX_AGE},
-    oauth::AuthQuery,
-    utils::time::current_epoch_secs,
-};
+use crate::{consts::AUTH_TOKEN_KID, oauth::AuthQuery, utils::time::current_epoch_secs};
 
 pub fn generate_code_grant_jwt(
     encoding_key: &jsonwebtoken::EncodingKey,
@@ -43,6 +41,7 @@ fn jwt_header() -> jsonwebtoken::Header {
 /// Generates access token and id token JWTs
 /// the first token is the access token
 /// the second token is the id token
+#[allow(clippy::too_many_arguments)]
 pub fn generate_access_token_and_id_token_jwt(
     encoding_key: &jsonwebtoken::EncodingKey,
     user_principal: Principal,
@@ -51,12 +50,13 @@ pub fn generate_access_token_and_id_token_jwt(
     client_id: &str,
     nonce: Option<String>,
     is_anonymous: bool,
+    max_age: Duration,
 ) -> (String, String) {
     let iat = current_epoch_secs();
 
     let access_claims = AccessTokenClaims {
         aud: client_id.to_string(),
-        exp: iat + ACCESS_TOKEN_MAX_AGE.as_secs() as usize,
+        exp: iat + max_age.as_secs() as usize,
         iat,
         iss: server_url.to_string(),
         sub: user_principal,
@@ -65,7 +65,7 @@ pub fn generate_access_token_and_id_token_jwt(
     };
     let id_claims = IdTokenClaims {
         aud: client_id.to_string(),
-        exp: iat + ACCESS_TOKEN_MAX_AGE.as_secs() as usize,
+        exp: iat + max_age.as_secs() as usize,
         iat,
         iss: server_url.to_string(),
         sub: user_principal,
@@ -91,6 +91,7 @@ pub fn generate_refresh_token_jwt(
     client_id: &str,
     nonce: Option<String>,
     is_anonymous: bool,
+    max_age: Duration,
 ) -> String {
     let iat = current_epoch_secs();
 
@@ -98,7 +99,7 @@ pub fn generate_refresh_token_jwt(
         &jwt_header(),
         &RefreshTokenClaims {
             aud: client_id.to_string(),
-            exp: iat + REFRESH_TOKEN_MAX_AGE.as_secs() as usize,
+            exp: iat + max_age.as_secs() as usize,
             iat,
             iss: server_url.to_string(),
             sub: user_principal,

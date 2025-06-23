@@ -1,18 +1,57 @@
-use std::sync::{Arc, LazyLock};
+#[cfg(test)]
+mod tests;
+mod whitelist;
 
-use crate::error::AuthErrorKind;
+use std::{
+    collections::HashMap,
+    sync::{Arc, LazyLock},
+};
+
+use crate::{
+    consts::{
+        ACCESS_TOKEN_MAX_AGE, BACKEND_ACCESS_TOKEN_MAX_AGE, BACKEND_REFRESH_TOKEN_MAX_AGE,
+        REFRESH_TOKEN_MAX_AGE,
+    },
+    error::AuthErrorKind,
+    oauth::client_validation::whitelist::default_oauth_clients,
+};
 use enum_dispatch::enum_dispatch;
 use regex::Regex;
 use url::Url;
+use web_time::Duration;
 
-#[derive(Debug, Clone, PartialEq)]
+pub struct ValidationRes {
+    pub kind: OAuthClientType,
+    pub access_max_age: Duration,
+    pub refresh_max_age: Duration,
+}
+
+impl From<OAuthClientType> for ValidationRes {
+    fn from(client_type: OAuthClientType) -> Self {
+        match client_type {
+            OAuthClientType::BackendService => Self {
+                kind: client_type,
+                access_max_age: BACKEND_ACCESS_TOKEN_MAX_AGE,
+                refresh_max_age: BACKEND_REFRESH_TOKEN_MAX_AGE,
+            },
+            _ => Self {
+                kind: client_type,
+                access_max_age: ACCESS_TOKEN_MAX_AGE,
+                refresh_max_age: REFRESH_TOKEN_MAX_AGE,
+            },
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum OAuthClientType {
     Web,
     Native,
     Preview,
+    BackendService,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct OAuthClient {
     pub client_id: String,
     pub redirect_urls: Vec<Url>,
@@ -75,14 +114,14 @@ pub(crate) trait ClientIdValidator {
         client_id: &str,
         redirect_uri: Option<&Url>,
         client_secret: Option<&str>,
-    ) -> Result<(), AuthErrorKind> {
+    ) -> Result<ValidationRes, AuthErrorKind> {
         use crate::oauth::jwt::ClientSecretClaims;
 
         let client = self.lookup_client(client_id).await?;
         self.validate_redirect_uri(client, redirect_uri)?;
 
         if client.client_type == OAuthClientType::Native {
-            return Ok(());
+            return Ok(client.client_type.into());
         }
 
         let Some(client_secret) = client_secret else {
@@ -95,7 +134,7 @@ pub(crate) trait ClientIdValidator {
         jsonwebtoken::decode::<ClientSecretClaims>(client_secret, validation_key, &validation)
             .map_err(|_| AuthErrorKind::UnauthorizedClient(client_id.to_string()))?;
 
-        Ok(())
+        Ok(client.client_type.into())
     }
 }
 
@@ -106,76 +145,22 @@ impl<T: ClientIdValidator> ClientIdValidator for Arc<T> {
 }
 
 pub struct ConstClientIdValidator {
-    clients: Vec<OAuthClient>,
+    clients: HashMap<String, OAuthClient>,
 }
 
 impl Default for ConstClientIdValidator {
     fn default() -> Self {
         Self {
-            clients: vec![
-                // Yral
-                OAuthClient {
-                    client_id: "31122c67-4801-4e70-82f0-08e12daa4f2d".to_string(),
-                    redirect_urls: vec!["https://localhost:3000/".parse().unwrap()],
-                    client_type: OAuthClientType::Web,
-                },
-                // Yral IOS
-                OAuthClient {
-                    client_id: "e1a6a7fb-8a1d-42dc-87b4-13ff94ecbe34".to_string(),
-                    redirect_urls: vec![
-                        "com.yral.iosApp://oauth/callback".parse().unwrap(),
-                        "com.yral.iosApp.staging://oauth/callback".parse().unwrap(),
-                    ],
-                    client_type: OAuthClientType::Native,
-                },
-                // Yral Next.js
-                OAuthClient {
-                    client_id: "6a0101eb-8496-4afb-ba48-425187c3a30d".to_string(),
-                    redirect_urls: vec![
-                        "https://pumpdump.wtf/api/oauth/callback".parse().unwrap(),
-                        "https://pd.dev/api/oauth/callback".parse().unwrap(),
-                        "http://localhost:5190/api/oauth/callback".parse().unwrap(),
-                        "https://pump-dump-kit.fly.dev/api/oauth/callback"
-                            .parse()
-                            .unwrap(),
-                    ],
-                    client_type: OAuthClientType::Web,
-                },
-                // Yral Android
-                OAuthClient {
-                    client_id: "c89b29de-8366-4e62-9b9e-c29585740acf".to_string(),
-                    redirect_urls: vec!["yral://oauth/callback".parse().unwrap()],
-                    client_type: OAuthClientType::Native,
-                },
-                // Yral Previews
-                OAuthClient {
-                    client_id: "5c86a459-493d-463e-965d-be6ed74f3e5f".to_string(),
-                    redirect_urls: vec![],
-                    client_type: OAuthClientType::Preview,
-                },
-                // Yral & Yral Staging
-                OAuthClient {
-                    client_id: "4ec00561-91bb-4e60-9743-8bed684145ba".to_string(),
-                    redirect_urls: vec![
-                        "https://yral.com/auth/google_redirect".parse().unwrap(),
-                        "https://hot-or-not-web-leptos-ssr-staging.fly.dev/auth/google_redirect"
-                            .parse()
-                            .unwrap(),
-                    ],
-                    client_type: OAuthClientType::Web,
-                },
-            ],
+            clients: default_oauth_clients(),
         }
     }
 }
 
 impl ClientIdValidator for ConstClientIdValidator {
     async fn lookup_client(&self, client_id: &str) -> Result<&OAuthClient, AuthErrorKind> {
-        let client = self.clients.iter().find(|c| c.client_id == client_id);
-        let Some(client) = client else {
-            return Err(AuthErrorKind::UnauthorizedClient(client_id.to_string()));
-        };
-        Ok(client)
+        self.clients
+            .get(client_id)
+            .ok_or_else(|| AuthErrorKind::UnauthorizedClient(client_id.to_string()))
     }
 }
 
