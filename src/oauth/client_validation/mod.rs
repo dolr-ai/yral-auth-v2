@@ -7,16 +7,45 @@ use std::{
     sync::{Arc, LazyLock},
 };
 
-use crate::{error::AuthErrorKind, oauth::client_validation::whitelist::default_oauth_clients};
+use crate::{
+    consts::{
+        ACCESS_TOKEN_MAX_AGE, BACKEND_ACCESS_TOKEN_MAX_AGE, BACKEND_REFRESH_TOKEN_MAX_AGE,
+        REFRESH_TOKEN_MAX_AGE,
+    },
+    error::AuthErrorKind,
+    oauth::client_validation::whitelist::default_oauth_clients,
+};
 use enum_dispatch::enum_dispatch;
 use regex::Regex;
 use url::Url;
+use web_time::Duration;
 
-#[derive(Debug, Clone, PartialEq)]
+pub struct ValidationRes {
+    pub access_max_age: Duration,
+    pub refresh_max_age: Duration,
+}
+
+impl From<OAuthClientType> for ValidationRes {
+    fn from(client_type: OAuthClientType) -> Self {
+        match client_type {
+            OAuthClientType::BackendService => Self {
+                access_max_age: BACKEND_ACCESS_TOKEN_MAX_AGE,
+                refresh_max_age: BACKEND_REFRESH_TOKEN_MAX_AGE,
+            },
+            _ => Self {
+                access_max_age: ACCESS_TOKEN_MAX_AGE,
+                refresh_max_age: REFRESH_TOKEN_MAX_AGE,
+            },
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum OAuthClientType {
     Web,
     Native,
     Preview,
+    BackendService,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -82,14 +111,14 @@ pub(crate) trait ClientIdValidator {
         client_id: &str,
         redirect_uri: Option<&Url>,
         client_secret: Option<&str>,
-    ) -> Result<(), AuthErrorKind> {
+    ) -> Result<ValidationRes, AuthErrorKind> {
         use crate::oauth::jwt::ClientSecretClaims;
 
         let client = self.lookup_client(client_id).await?;
         self.validate_redirect_uri(client, redirect_uri)?;
 
         if client.client_type == OAuthClientType::Native {
-            return Ok(());
+            return Ok(client.client_type.into());
         }
 
         let Some(client_secret) = client_secret else {
@@ -102,7 +131,7 @@ pub(crate) trait ClientIdValidator {
         jsonwebtoken::decode::<ClientSecretClaims>(client_secret, validation_key, &validation)
             .map_err(|_| AuthErrorKind::UnauthorizedClient(client_id.to_string()))?;
 
-        Ok(())
+        Ok(client.client_type.into())
     }
 }
 

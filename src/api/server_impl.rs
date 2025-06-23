@@ -11,14 +11,14 @@ use ic_agent::{
 };
 use sha2::{Digest, Sha256};
 use url::Url;
+use web_time::Duration;
 use yral_types::delegated_identity::DelegatedIdentityWire;
 
 use crate::{
-    consts::ACCESS_TOKEN_MAX_AGE,
     context::server::ServerCtx,
     kv::KVStore,
     oauth::{
-        client_validation::ClientIdValidator,
+        client_validation::{ClientIdValidator, ValidationRes},
         jwt::{
             generate::{generate_access_token_and_id_token_jwt, generate_refresh_token_jwt},
             AuthCodeClaims, RefreshTokenClaims,
@@ -34,7 +34,7 @@ async fn verify_client_secret(
     client_id: &str,
     client_secret: Option<String>,
     redirect_uri: Option<&Url>,
-) -> Result<(), TokenGrantError> {
+) -> Result<ValidationRes, TokenGrantError> {
     ctx.validator
         .full_validation(
             &ctx.jwk_pairs.client_tokens.decoding_key,
@@ -46,9 +46,7 @@ async fn verify_client_secret(
         .map_err(|e| TokenGrantError {
             error: TokenGrantErrorKind::InvalidClient,
             error_description: e.to_string(),
-        })?;
-
-    Ok(())
+        })
 }
 
 impl IntoResponse for TokenGrantResult {
@@ -119,12 +117,12 @@ pub async fn handle_oauth_token_grant(
     }
 }
 
-fn delegate_identity(from: &impl Identity) -> DelegatedIdentityWire {
+fn delegate_identity(from: &impl Identity, max_age: Duration) -> DelegatedIdentityWire {
     let mut rng = rand::thread_rng();
     let to_secret = k256::SecretKey::random(&mut rng);
     let to_secret_jwk = to_secret.to_jwk();
     let to_identity = Secp256k1Identity::from_private_key(to_secret);
-    let expiry = current_epoch() + ACCESS_TOKEN_MAX_AGE;
+    let expiry = current_epoch() + max_age;
     let delegation = Delegation {
         pubkey: to_identity.public_key().unwrap(),
         expiration: expiry.as_nanos() as u64,
@@ -152,8 +150,9 @@ fn generate_access_token_with_identity(
     client_id: &str,
     nonce: Option<String>,
     is_anonymous: bool,
+    res: ValidationRes,
 ) -> TokenGrantRes {
-    let delegated_identity = delegate_identity(&identity);
+    let delegated_identity = delegate_identity(&identity, res.access_max_age);
     let user_principal = identity.sender().unwrap();
 
     let (access_token, id_token) = generate_access_token_and_id_token_jwt(
@@ -164,6 +163,7 @@ fn generate_access_token_with_identity(
         client_id,
         nonce.clone(),
         is_anonymous,
+        res.access_max_age,
     );
     let refresh_token = generate_refresh_token_jwt(
         &ctx.jwk_pairs.auth_tokens.encoding_key,
@@ -172,6 +172,7 @@ fn generate_access_token_with_identity(
         client_id,
         nonce,
         is_anonymous,
+        res.refresh_max_age,
     );
 
     TokenGrantRes::new(access_token, id_token, refresh_token)
@@ -183,6 +184,7 @@ async fn generate_access_token(
     client_id: &str,
     nonce: Option<String>,
     is_anonymous: bool,
+    validation_res: ValidationRes,
 ) -> Result<TokenGrantRes, TokenGrantError> {
     let identity_jwk = ctx
         .kv_store
@@ -203,7 +205,14 @@ async fn generate_access_token(
     })?;
     let id = Secp256k1Identity::from_private_key(sk);
 
-    let grant = generate_access_token_with_identity(ctx, id, client_id, nonce, is_anonymous);
+    let grant = generate_access_token_with_identity(
+        ctx,
+        id,
+        client_id,
+        nonce,
+        is_anonymous,
+        validation_res,
+    );
 
     Ok(grant)
 }
@@ -216,7 +225,8 @@ async fn handle_authorization_code_grant(
     client_id: String,
     client_secret: Option<String>,
 ) -> Result<TokenGrantRes, TokenGrantError> {
-    verify_client_secret(ctx, &client_id, client_secret, Some(&redirect_uri)).await?;
+    let validation_res =
+        verify_client_secret(ctx, &client_id, client_secret, Some(&redirect_uri)).await?;
 
     let mut validation = jsonwebtoken::Validation::new(jsonwebtoken::Algorithm::ES256);
     validation.set_audience(&[&client_id]);
@@ -256,6 +266,7 @@ async fn handle_authorization_code_grant(
         &client_id,
         code_claims.nonce.clone(),
         false,
+        validation_res,
     )
     .await?;
 
@@ -268,7 +279,7 @@ async fn handle_refresh_token_grant(
     client_id: String,
     client_secret: Option<String>,
 ) -> Result<TokenGrantRes, TokenGrantError> {
-    verify_client_secret(ctx, &client_id, client_secret, None).await?;
+    let validation_res = verify_client_secret(ctx, &client_id, client_secret, None).await?;
 
     let mut validation = jsonwebtoken::Validation::new(jsonwebtoken::Algorithm::ES256);
     validation.set_audience(&[&client_id]);
@@ -292,6 +303,7 @@ async fn handle_refresh_token_grant(
         &client_id,
         None,
         refresh_claims.ext_is_anonymous,
+        validation_res,
     )
     .await?;
 
@@ -303,7 +315,7 @@ async fn handle_client_credentials_grant(
     client_id: String,
     client_secret: Option<String>,
 ) -> Result<TokenGrantRes, TokenGrantError> {
-    verify_client_secret(ctx, &client_id, client_secret, None).await?;
+    let validation_res = verify_client_secret(ctx, &client_id, client_secret, None).await?;
 
     let identity = generate_random_identity_and_save(&ctx.kv_store)
         .await
@@ -312,7 +324,8 @@ async fn handle_client_credentials_grant(
             error_description: e.to_string(),
         })?;
 
-    let grant = generate_access_token_with_identity(ctx, identity, &client_id, None, true);
+    let grant =
+        generate_access_token_with_identity(ctx, identity, &client_id, None, true, validation_res);
 
     Ok(grant)
 }
