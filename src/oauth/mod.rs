@@ -241,8 +241,6 @@ pub enum TokenGrantErrorKind {
     InvalidScope,
     #[serde(rename = "server_error")]
     ServerError,
-    #[serde(rename = "principal_not_found")]
-    PrincipalNotFound,
 }
 
 impl TokenGrantErrorKind {

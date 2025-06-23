@@ -193,7 +193,7 @@ async fn generate_access_token(
             error_description: e.to_string(),
         })?
         .ok_or_else(|| TokenGrantError {
-            error: TokenGrantErrorKind::PrincipalNotFound,
+            error: TokenGrantErrorKind::ServerError,
             error_description: format!("unknown principal {user_principal}"),
         })?;
 
