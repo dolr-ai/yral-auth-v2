@@ -6,7 +6,6 @@ use yral_types::delegated_identity::DelegatedIdentityWire;
 
 use super::CodeChallenge;
 
-#[cfg(feature = "ssr")]
 pub mod generate;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

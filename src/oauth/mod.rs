@@ -1,3 +1,4 @@
+#[cfg(feature = "ssr")]
 pub mod jwt;
 
 use std::{
@@ -219,7 +220,7 @@ impl AuthCodeError {
             self.redirect_uri, self.error, self.error_description
         );
         if let Some(state) = self.state {
-            res.push_str(&format!("&state={}", state));
+            res.push_str(&format!("&state={state}"));
         }
         res
     }
