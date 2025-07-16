@@ -151,6 +151,7 @@ fn generate_access_token_with_identity(
     nonce: Option<String>,
     is_anonymous: bool,
     res: ValidationRes,
+    email: Option<String>,
 ) -> TokenGrantRes {
     let delegated_identity = delegate_identity(&identity, res.access_max_age);
     let user_principal = identity.sender().unwrap();
@@ -164,6 +165,7 @@ fn generate_access_token_with_identity(
         nonce.clone(),
         is_anonymous,
         res.access_max_age,
+        email.clone(),
     );
     let refresh_token = generate_refresh_token_jwt(
         &ctx.jwk_pairs.auth_tokens.encoding_key,
@@ -173,6 +175,7 @@ fn generate_access_token_with_identity(
         nonce,
         is_anonymous,
         res.refresh_max_age,
+        email,
     );
 
     TokenGrantRes::new(access_token, id_token, refresh_token)
@@ -185,6 +188,7 @@ async fn generate_access_token(
     nonce: Option<String>,
     is_anonymous: bool,
     validation_res: ValidationRes,
+    email: Option<String>,
 ) -> Result<TokenGrantRes, TokenGrantError> {
     let identity_jwk = ctx
         .kv_store
@@ -212,6 +216,7 @@ async fn generate_access_token(
         nonce,
         is_anonymous,
         validation_res,
+        email,
     );
 
     Ok(grant)
@@ -267,6 +272,7 @@ async fn handle_authorization_code_grant(
         code_claims.nonce.clone(),
         false,
         validation_res,
+        code_claims.ext_email,
     )
     .await?;
 
@@ -304,6 +310,7 @@ async fn handle_refresh_token_grant(
         None,
         refresh_claims.ext_is_anonymous,
         validation_res,
+        refresh_claims.ext_email,
     )
     .await?;
 
@@ -336,7 +343,7 @@ async fn client_credentials_grant_for_backend(
         })?;
 
     if let Some(principal) = princ_res {
-        return generate_access_token(ctx, principal, &client_id, None, false, res).await;
+        return generate_access_token(ctx, principal, &client_id, None, false, res, None).await;
     }
 
     let identity = generate_random_identity_and_save(&ctx.kv_store)
@@ -354,7 +361,8 @@ async fn client_credentials_grant_for_backend(
             error_description: e.to_string(),
         })?;
 
-    let grant = generate_access_token_with_identity(ctx, identity, &client_id, None, false, res);
+    let grant =
+        generate_access_token_with_identity(ctx, identity, &client_id, None, false, res, None);
 
     Ok(grant)
 }
@@ -376,8 +384,15 @@ async fn handle_client_credentials_grant(
             error_description: e.to_string(),
         })?;
 
-    let grant =
-        generate_access_token_with_identity(ctx, identity, &client_id, None, true, validation_res);
+    let grant = generate_access_token_with_identity(
+        ctx,
+        identity,
+        &client_id,
+        None,
+        true,
+        validation_res,
+        None,
+    );
 
     Ok(grant)
 }

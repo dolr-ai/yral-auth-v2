@@ -11,6 +11,7 @@ pub fn generate_code_grant_jwt(
     user_principal: Principal,
     server_url: &str,
     query: AuthQuery,
+    email: Option<String>,
 ) -> String {
     let iat = current_epoch_secs();
 
@@ -25,6 +26,7 @@ pub fn generate_code_grant_jwt(
             ext_redirect_uri: query.redirect_uri,
             nonce: query.nonce,
             ext_code_challenge_s256: query.code_challenge,
+            ext_email: email,
         },
         encoding_key,
     )
@@ -51,6 +53,7 @@ pub fn generate_access_token_and_id_token_jwt(
     nonce: Option<String>,
     is_anonymous: bool,
     max_age: Duration,
+    email: Option<String>,
 ) -> (String, String) {
     let iat = current_epoch_secs();
 
@@ -72,6 +75,7 @@ pub fn generate_access_token_and_id_token_jwt(
         nonce,
         ext_is_anonymous: is_anonymous,
         ext_delegated_identity: identity,
+        email,
     };
 
     let header = jwt_header();
@@ -84,6 +88,7 @@ pub fn generate_access_token_and_id_token_jwt(
     (access_token, id_token)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn generate_refresh_token_jwt(
     encoding_key: &jsonwebtoken::EncodingKey,
     user_principal: Principal,
@@ -92,6 +97,7 @@ pub fn generate_refresh_token_jwt(
     nonce: Option<String>,
     is_anonymous: bool,
     max_age: Duration,
+    email: Option<String>,
 ) -> String {
     let iat = current_epoch_secs();
 
@@ -105,6 +111,7 @@ pub fn generate_refresh_token_jwt(
             sub: user_principal,
             nonce,
             ext_is_anonymous: is_anonymous,
+            ext_email: email,
         },
         encoding_key,
     )
