@@ -12,7 +12,7 @@ use leptos::prelude::{expect_context, ServerFnError};
 use leptos_axum::{extract_with_state, ResponseOptions};
 use openidconnect::{
     core::CoreAuthenticationFlow, AuthorizationCode, CsrfToken, Nonce, PkceCodeChallenge,
-    PkceCodeVerifier,
+    PkceCodeVerifier, Scope,
 };
 use serde::{Deserialize, Serialize};
 
@@ -80,6 +80,7 @@ pub async fn get_oauth_url_impl(
             Nonce::new_random,
         )
         .set_pkce_challenge(pkce_challenge)
+        .add_scope(Scope::new("email".to_string()))
         .url();
 
     let mut jar: PrivateCookieJar = extract_with_state(&ctx.cookie_key).await?;
@@ -189,6 +190,7 @@ async fn generate_oauth_login_code(
     // we don't use a nonce
     let claims = oauth_impl.verify_id_token(&oauth2, id_token)?;
     let sub_id = claims.subject();
+    let email = claims.email().map(|e| String::from(e.clone()));
 
     let maybe_principal = try_extract_principal_from_oauth_sub(provider, &ctx.kv_store, sub_id)
         .await
@@ -211,6 +213,7 @@ async fn generate_oauth_login_code(
         principal,
         &ctx.server_url,
         query,
+        email,
     );
 
     Ok(code_grant)
