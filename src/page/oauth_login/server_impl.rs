@@ -73,15 +73,20 @@ pub async fn get_oauth_url_impl(
         .map_err(|_| ServerFnError::new("failed to serialize oauth state"))?;
     let oauth_state_b64 = BASE64_URL_SAFE.encode(oauth_state_raw);
 
-    let (auth_url, oauth_csrf_token, _) = oauth_provider
+    let authorize_builder = oauth_provider
         .authorize_url(
             CoreAuthenticationFlow::AuthorizationCode,
             move || CsrfToken::new(oauth_state_b64),
             Nonce::new_random,
         )
-        .set_pkce_challenge(pkce_challenge)
-        .add_scope(Scope::new("email".to_string()))
-        .url();
+        .set_pkce_challenge(pkce_challenge);
+    let (auth_url, oauth_csrf_token, _) = if provider == SupportedOAuthProviders::Google {
+        authorize_builder
+            .add_scope(Scope::new("email".to_string()))
+            .url()
+    } else {
+        authorize_builder.url()
+    };
 
     let mut jar: PrivateCookieJar = extract_with_state(&ctx.cookie_key).await?;
 
