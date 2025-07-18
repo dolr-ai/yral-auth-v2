@@ -176,6 +176,7 @@ impl From<AuthErrorKind> for AuthCodeErrorKind {
             AuthErrorKind::InvalidCodeChallengeMethod(_) => Self::InvalidRequest,
             AuthErrorKind::InvalidLoginHint => Self::InvalidRequest,
             AuthErrorKind::InvalidProvider(_) => Self::ServerError,
+            AuthErrorKind::Banned => Self::AccessDenied,
         }
     }
 }
