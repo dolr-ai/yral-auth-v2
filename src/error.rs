@@ -25,6 +25,8 @@ pub enum AuthErrorKind {
     InvalidProvider(String),
     #[error("Invalid login hint")]
     InvalidLoginHint,
+    #[error("User has been banned")]
+    Banned,
 }
 
 impl AuthErrorKind {

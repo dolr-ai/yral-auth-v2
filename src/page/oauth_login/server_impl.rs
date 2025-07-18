@@ -19,7 +19,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     context::server::expect_server_ctx,
     error::AuthErrorKind,
-    kv::{KVError, KVStore, KVStoreImpl},
+    kv::{KVStore, KVStoreImpl},
     oauth::{
         jwt::generate::generate_code_grant_jwt, login_hint_message, AuthLoginHint, AuthQuery,
         SupportedOAuthProviders,
@@ -122,17 +122,22 @@ async fn try_extract_principal_from_oauth_sub(
     provider: SupportedOAuthProviders,
     kv: &KVStoreImpl,
     sub_id: &str,
-) -> Result<Option<String>, KVError> {
+) -> Result<Option<String>, AuthErrorKind> {
     let key = principal_lookup_key(provider, sub_id);
-    let Some(principal_str) = kv.read(key).await? else {
+    let Some(principal_str) = kv.read(key).await.map_err(AuthErrorKind::unexpected)? else {
         return Ok(None);
     };
 
-    // TODO: remove this after spacetime migration and handling
-    if kv.has_key(principal_str.clone()).await? {
+    if kv
+        .has_key(principal_str.clone())
+        .await
+        .map_err(AuthErrorKind::unexpected)?
+    {
         Ok(Some(principal_str))
     } else {
-        Ok(None)
+        // User had deleted their account,
+        // don't allow creation of new account again
+        Err(AuthErrorKind::Banned)
     }
 }
 
