@@ -76,6 +76,16 @@ pub fn default_oauth_clients() -> HashMap<String, OAuthClient> {
             [],
             OAuthClientType::BackendService
         },
+        // EstateDAO
+        {
+            "ada497c8-f8e1-4ab8-b3b1-f2b873357f5f",
+            [
+                "http://localhost:3002/auth/callback",
+                "https://nofeebooking.com/auth/callback",
+                "https://estatefe.fly.dev/auth/callback"
+            ],
+            OAuthClientType::Web
+        },
     };
 
     oauth_clients
