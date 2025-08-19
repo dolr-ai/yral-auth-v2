@@ -9,6 +9,8 @@ use ic_agent::{
     identity::{Delegation, Secp256k1Identity, SignedDelegation},
     Identity,
 };
+use leptos::prelude::*;
+use leptos::server;
 use sha2::{Digest, Sha256};
 use url::Url;
 use web_time::Duration;
@@ -71,6 +73,11 @@ pub async fn handle_oidc_configuration(Extension(ctx): Extension<Arc<ServerCtx>>
     let jwks_uri = format!("{}/.well-known/jwks.json", ctx.server_url,);
 
     Json(PartialOIDCConfig { jwks_uri }).into_response()
+}
+
+#[server(endpoint = "healthz")]
+pub async fn healthz() -> Result<(), ServerFnError> {
+    Ok(())
 }
 
 pub async fn handle_oauth_token_grant(
