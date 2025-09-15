@@ -68,7 +68,7 @@ impl Default for JwkPairs {
         let auth_jwt_pub_pem =
             env::var("JWT_PUB_EC_PEM").unwrap_or_else(|_| panic!("`JWT_PUB_EC_PEM` is required!"));
         let auth_jwt_ec_pub = p256::ecdsa::VerifyingKey::from_public_key_pem(&auth_jwt_pub_pem)
-            .expect("Invalid `JWT_PUB_ED_PEM`");
+            .expect("Invalid `JWT_PUB_EC_PEM`");
         let auth_jwt_ec = auth_jwt_ec_pub.to_encoded_point(false);
 
         let auth_jwt_x = auth_jwt_ec.x().unwrap();
