@@ -122,6 +122,7 @@ async fn try_extract_principal_from_oauth_sub(
     provider: SupportedOAuthProviders,
     kv: &KVStoreImpl,
     sub_id: &str,
+    email: Option<&str>,
 ) -> Result<Option<String>, AuthErrorKind> {
     let key = principal_lookup_key(provider, sub_id);
     let Some(principal_str) = kv.read(key).await.map_err(AuthErrorKind::unexpected)? else {
@@ -134,6 +135,12 @@ async fn try_extract_principal_from_oauth_sub(
         .map_err(AuthErrorKind::unexpected)?
     {
         Ok(Some(principal_str))
+    } else if email
+        .map(|e| e.ends_with("@gobazzinga.io"))
+        .unwrap_or(false)
+    {
+        // Allow whitelisted users to create a new account
+        Ok(None)
     } else {
         // User had deleted their account,
         // don't allow creation of new account again
@@ -202,9 +209,10 @@ async fn generate_oauth_login_code(
     let sub_id = claims.subject();
     let email = claims.email().map(|e| String::from(e.clone()));
 
-    let maybe_principal = try_extract_principal_from_oauth_sub(provider, &ctx.kv_store, sub_id)
-        .await
-        .map_err(AuthErrorKind::unexpected)?;
+    let maybe_principal =
+        try_extract_principal_from_oauth_sub(provider, &ctx.kv_store, sub_id, email.as_deref())
+            .await
+            .map_err(AuthErrorKind::unexpected)?;
     let principal = if let Some(principal_str) = maybe_principal {
         Principal::from_text(principal_str)
             .map_err(|_| AuthErrorKind::unexpected("Invalid principal from KV"))?
