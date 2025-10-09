@@ -23,3 +23,5 @@ redb-kv.db
 .DS_Store
 
 .direnv
+
+.claude

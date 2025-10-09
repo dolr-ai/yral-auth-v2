@@ -126,25 +126,32 @@ async fn try_extract_principal_from_oauth_sub(
 ) -> Result<Option<String>, AuthErrorKind> {
     let key = principal_lookup_key(provider, sub_id);
     let Some(principal_str) = kv.read(key).await.map_err(AuthErrorKind::unexpected)? else {
+        log::debug!("No principal found for {provider} : {email:?}");
         return Ok(None);
     };
+
+    log::debug!("Found principal {principal_str} for {provider} : {email:?}");
 
     if kv
         .has_key(principal_str.clone())
         .await
         .map_err(AuthErrorKind::unexpected)?
     {
+        log::debug!("Principal {principal_str} is valid for {provider} : {email:?}");
         Ok(Some(principal_str))
     } else if email
         .map(|e| e.ends_with("@gobazzinga.io"))
         .unwrap_or(false)
     {
+        log::debug!("Principal {principal_str} is banned, but email {email:?} is whitelisted");
         // Allow whitelisted users to create a new account
         Ok(None)
     } else {
         // User had deleted their account,
         // don't allow creation of new account again
-        Err(AuthErrorKind::Banned)
+        log::debug!("Principal {principal_str} is banned for {provider} : {email:?}");
+        Ok(None) // temporarily allow banned users
+                 // Err(AuthErrorKind::Banned)
     }
 }
 
