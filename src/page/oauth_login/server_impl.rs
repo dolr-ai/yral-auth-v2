@@ -160,6 +160,7 @@ async fn principal_from_login_hint_or_generate_and_save(
     kv: &KVStoreImpl,
     sub_id: &str,
     login_hint: Option<AuthLoginHint>,
+    email: Option<&str>,
 ) -> Result<Principal, AuthErrorKind> {
     let user_principal = if let Some(login_hint) = login_hint {
         let msg = login_hint_message();
@@ -167,8 +168,15 @@ async fn principal_from_login_hint_or_generate_and_save(
             .signature
             .verify_identity(login_hint.user_principal, msg)
             .map_err(|_| AuthErrorKind::InvalidLoginHint)?;
+        log::debug!(
+            "Using login hint principal {} for provider {provider} for email {email:?}",
+            login_hint.user_principal.to_text()
+        );
         login_hint.user_principal
     } else {
+        log::debug!(
+            "No login hint provided, generating new principal for provider {provider} for email {email:?}"
+        );
         let identity = generate_random_identity_and_save(kv)
             .await
             .map_err(|_| AuthErrorKind::unexpected("failed to generate id"))?;
@@ -229,6 +237,7 @@ async fn generate_oauth_login_code(
             &ctx.kv_store,
             sub_id,
             query.login_hint.clone(),
+            email.as_deref(),
         )
         .await?
     };
