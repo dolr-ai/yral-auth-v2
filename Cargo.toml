@@ -55,6 +55,8 @@ rand = { version = "0.8.5", optional = true }
 web-time = "1.1.0"
 p256 = { version = "0.13.2", features = ["pkcs8"], optional = true }
 regex = "1.11.1"
+sentry = { version = "0.42.0", optional = true, features = ["tracing", "backtrace", "contexts", "panic", "debug-images"] }
+sentry-tower = { version = "0.42.0", optional = true }
 
 yral-types = { git = "https://github.com/yral-dapp/yral-common.git", branch = "master" }
 yral-identity = { git = "https://github.com/yral-dapp/yral-common.git", branch = "master", default-features = false }
@@ -89,6 +91,8 @@ ssr = [
     "yral-identity/ic-git",
     "dep:p256",
     "dep:jsonwebtoken",
+    "dep:sentry",
+    "dep:sentry-tower",
 ]
 release-lib = ["hydrate"]
 release-bin = ["ssr", "redis-kv"]

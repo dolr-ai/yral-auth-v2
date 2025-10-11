@@ -57,6 +57,17 @@ fn server_routes(ctx: Arc<ServerCtx>) -> Router {
 
 #[tokio::main]
 async fn main() {
+    let _guard = sentry::init((
+        "https://c53f9a4a36ea0d767540c5e8ee31f2ee@apm.yral.com/5",
+        sentry::ClientOptions {
+            release: sentry::release_name!(),
+            // Capture user IPs and potentially sensitive headers when using HTTP server integrations
+            // see https://docs.sentry.io/platforms/rust/data-management/data-collected for more info
+            send_default_pii: true,
+            ..Default::default()
+        },
+    ));
+
     simple_logger::init_with_level(log::Level::Debug).expect("couldn't initialize logging");
 
     let conf = get_configuration(None).unwrap();
@@ -82,7 +93,9 @@ async fn main() {
         .leptos_routes_with_handler(routes, get(leptos_routes_handler))
         .fallback(leptos_axum::file_and_error_handler::<ServerState, _>(shell))
         .with_state(app_state)
-        .merge(server_routes(ctx));
+        .merge(server_routes(ctx))
+        .layer(sentry_tower::NewSentryLayer::new_from_top())
+        .layer(sentry_tower::SentryLayer::new_from_top());
 
     // run our app with hyper
     // `axum::Server` is a re-export of `hyper::Server`

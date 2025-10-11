@@ -84,6 +84,13 @@ pub async fn handle_oauth_token_grant(
     Extension(ctx): Extension<Arc<ServerCtx>>,
     Form(req): Form<AuthGrantQuery>,
 ) -> Response {
+    sentry::add_breadcrumb(sentry::Breadcrumb {
+        ty: "info".into(),
+        category: Some("token_grant".into()),
+        message: Some(format!("Token grant request: {:?}", std::mem::discriminant(&req))),
+        ..Default::default()
+    });
+
     let res = match req {
         AuthGrantQuery::AuthorizationCode {
             code,
@@ -92,6 +99,10 @@ pub async fn handle_oauth_token_grant(
             client_id,
             client_secret,
         } => {
+            sentry::configure_scope(|scope| {
+                scope.set_tag("grant_type", "authorization_code");
+                scope.set_tag("client_id", client_id.clone());
+            });
             handle_authorization_code_grant(
                 &ctx,
                 code,
@@ -106,16 +117,52 @@ pub async fn handle_oauth_token_grant(
             refresh_token,
             client_id,
             client_secret,
-        } => handle_refresh_token_grant(&ctx, refresh_token, client_id, client_secret).await,
+        } => {
+            sentry::configure_scope(|scope| {
+                scope.set_tag("grant_type", "refresh_token");
+                scope.set_tag("client_id", client_id.clone());
+            });
+            handle_refresh_token_grant(&ctx, refresh_token, client_id, client_secret).await
+        }
         AuthGrantQuery::ClientCredentials {
             client_id,
             client_secret,
-        } => handle_client_credentials_grant(&ctx, client_id, client_secret).await,
+        } => {
+            sentry::configure_scope(|scope| {
+                scope.set_tag("grant_type", "client_credentials");
+                scope.set_tag("client_id", client_id.clone());
+            });
+            handle_client_credentials_grant(&ctx, client_id, client_secret).await
+        }
     };
 
     match res {
-        Ok(grant) => Json(grant).into_response(),
-        Err(e) => {
+        Ok(grant) => {
+            sentry::add_breadcrumb(sentry::Breadcrumb {
+                ty: "info".into(),
+                category: Some("token_grant".into()),
+                message: Some("Token grant successful".to_string()),
+                ..Default::default()
+            });
+            Json(grant).into_response()
+        }
+        Err(ref e) => {
+            sentry::capture_message(
+                &format!("Token grant failed: {:?} - {}", e.error, e.error_description),
+                sentry::Level::Warning,
+            );
+            sentry::add_breadcrumb(sentry::Breadcrumb {
+                ty: "error".into(),
+                category: Some("token_grant".into()),
+                message: Some(format!("Token grant error: {:?}", e.error)),
+                data: {
+                    let mut map = std::collections::BTreeMap::new();
+                    map.insert("error".to_string(), format!("{:?}", e.error).into());
+                    map.insert("description".to_string(), e.error_description.clone().into());
+                    map
+                },
+                ..Default::default()
+            });
             let status_code = e.error.status_code();
             let mut res = Json(e).into_response();
             *res.status_mut() = status_code;
@@ -201,19 +248,42 @@ async fn generate_access_token(
         .kv_store
         .read(user_principal.to_text())
         .await
+        .inspect_err(|e| {
+            sentry::capture_error(e);
+            sentry::add_breadcrumb(sentry::Breadcrumb {
+                ty: "error".into(),
+                category: Some("token_grant".into()),
+                message: Some("Failed to read identity from KV store".to_string()),
+                ..Default::default()
+            });
+        })
         .map_err(|e| TokenGrantError {
             error: TokenGrantErrorKind::ServerError,
             error_description: e.to_string(),
         })?
-        .ok_or_else(|| TokenGrantError {
-            error: TokenGrantErrorKind::ServerError,
-            error_description: format!("unknown principal {user_principal}"),
+        .ok_or_else(|| {
+            sentry::capture_message(
+                &format!("Unknown principal in token generation: {user_principal}"),
+                sentry::Level::Error,
+            );
+            TokenGrantError {
+                error: TokenGrantErrorKind::ServerError,
+                error_description: format!("unknown principal {user_principal}"),
+            }
         })?;
 
-    let sk = k256::SecretKey::from_jwk_str(&identity_jwk).map_err(|_| TokenGrantError {
-        error: TokenGrantErrorKind::ServerError,
-        error_description: "invalid identity in store?!".into(),
-    })?;
+    let sk = k256::SecretKey::from_jwk_str(&identity_jwk)
+        .inspect_err(|e| {
+            sentry::capture_error(e);
+            sentry::capture_message(
+                "Invalid identity JWK in store",
+                sentry::Level::Error,
+            );
+        })
+        .map_err(|_| TokenGrantError {
+            error: TokenGrantErrorKind::ServerError,
+            error_description: "invalid identity in store?!".into(),
+        })?;
     let id = Secp256k1Identity::from_private_key(sk);
 
     let grant = generate_access_token_with_identity(
@@ -237,6 +307,13 @@ async fn handle_authorization_code_grant(
     client_id: String,
     client_secret: Option<String>,
 ) -> Result<TokenGrantRes, TokenGrantError> {
+    sentry::add_breadcrumb(sentry::Breadcrumb {
+        ty: "info".into(),
+        category: Some("token_grant".into()),
+        message: Some("Processing authorization code grant".to_string()),
+        ..Default::default()
+    });
+
     let validation_res =
         verify_client_secret(ctx, &client_id, client_secret, Some(&redirect_uri)).await?;
 
@@ -249,6 +326,15 @@ async fn handle_authorization_code_grant(
         &ctx.jwk_pairs.auth_tokens.decoding_key,
         &validation,
     )
+    .inspect_err(|e| {
+        sentry::capture_error(e);
+        sentry::add_breadcrumb(sentry::Breadcrumb {
+            ty: "error".into(),
+            category: Some("token_grant".into()),
+            message: Some("Failed to decode authorization code".to_string()),
+            ..Default::default()
+        });
+    })
     .map_err(|e| TokenGrantError {
         error: TokenGrantErrorKind::InvalidGrant,
         error_description: e.to_string(),

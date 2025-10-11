@@ -54,12 +54,36 @@ pub async fn get_oauth_url_impl(
     provider: SupportedOAuthProviders,
     client_state: String,
 ) -> Result<String, ServerFnError> {
+    sentry::add_breadcrumb(sentry::Breadcrumb {
+        ty: "info".into(),
+        category: Some("oauth".into()),
+        message: Some(format!("Starting OAuth URL generation for provider: {provider}")),
+        ..Default::default()
+    });
+
+    sentry::configure_scope(|scope| {
+        scope.set_tag("oauth_provider", provider.to_string());
+        scope.set_context("OAuth Flow", sentry::protocol::Context::Other({
+            let mut map = std::collections::BTreeMap::new();
+            map.insert("step".to_string(), "url_generation".into());
+            map.insert("provider".to_string(), provider.to_string().into());
+            map
+        }));
+    });
+
     let ctx = expect_server_ctx();
 
     let oauth_provider = ctx
         .oauth_providers
         .get(&provider)
-        .ok_or_else(|| ServerFnError::new("unsupported provider"))?
+        .ok_or_else(|| {
+            let err = ServerFnError::new("unsupported provider");
+            sentry::capture_message(
+                &format!("Unsupported OAuth provider requested: {provider}"),
+                sentry::Level::Error,
+            );
+            err
+        })?
         .get_client();
 
     let (pkce_challenge, pkce_verifier) = PkceCodeChallenge::new_random_sha256();
@@ -124,8 +148,30 @@ async fn try_extract_principal_from_oauth_sub(
     sub_id: &str,
     email: Option<&str>,
 ) -> Result<Option<String>, AuthErrorKind> {
+    sentry::add_breadcrumb(sentry::Breadcrumb {
+        ty: "info".into(),
+        category: Some("oauth".into()),
+        message: Some(format!("Looking up principal for {provider}")),
+        data: {
+            let mut map = std::collections::BTreeMap::new();
+            map.insert("provider".to_string(), provider.to_string().into());
+            if let Some(email) = email {
+                map.insert("email_domain".to_string(),
+                    email.split('@').last().unwrap_or("unknown").into());
+            }
+            map
+        },
+        ..Default::default()
+    });
+
     let key = principal_lookup_key(provider, sub_id);
-    let Some(principal_str) = kv.read(key).await.map_err(AuthErrorKind::unexpected)? else {
+    let Some(principal_str) = kv
+        .read(key)
+        .await
+        .inspect_err(|e| {
+            sentry::capture_error(e);
+        })
+        .map_err(AuthErrorKind::unexpected)? else {
         log::debug!("No principal found for {provider} : {email:?}");
         return Ok(None);
     };
@@ -135,21 +181,47 @@ async fn try_extract_principal_from_oauth_sub(
     if kv
         .has_key(principal_str.clone())
         .await
+        .inspect_err(|e| {
+            sentry::capture_error(e);
+        })
         .map_err(AuthErrorKind::unexpected)?
     {
         log::debug!("Principal {principal_str} is valid for {provider} : {email:?}");
+        sentry::add_breadcrumb(sentry::Breadcrumb {
+            ty: "info".into(),
+            category: Some("oauth".into()),
+            message: Some("Existing principal found and validated".to_string()),
+            ..Default::default()
+        });
         Ok(Some(principal_str))
     } else if email
         .map(|e| e.ends_with("@gobazzinga.io"))
         .unwrap_or(false)
     {
         log::debug!("Principal {principal_str} is banned, but email {email:?} is whitelisted");
+        sentry::add_breadcrumb(sentry::Breadcrumb {
+            ty: "info".into(),
+            category: Some("oauth".into()),
+            message: Some("Whitelisted user bypassing ban".to_string()),
+            data: {
+                let mut map = std::collections::BTreeMap::new();
+                map.insert("email".to_string(), email.unwrap_or("unknown").into());
+                map
+            },
+            ..Default::default()
+        });
         // Allow whitelisted users to create a new account
         Ok(None)
     } else {
         // User had deleted their account,
         // don't allow creation of new account again
         log::debug!("Principal {principal_str} is banned for {provider} : {email:?}");
+        sentry::add_breadcrumb(sentry::Breadcrumb {
+            ty: "warning".into(),
+            category: Some("oauth".into()),
+            message: Some("Banned user attempting login (temporarily allowed)".to_string()),
+            ..Default::default()
+        });
         Ok(None) // temporarily allow banned users
                  // Err(AuthErrorKind::Banned)
     }
@@ -199,30 +271,98 @@ async fn generate_oauth_login_code(
     provider: SupportedOAuthProviders,
     query: AuthQuery,
 ) -> Result<String, AuthErrorKind> {
+    sentry::add_breadcrumb(sentry::Breadcrumb {
+        ty: "info".into(),
+        category: Some("oauth".into()),
+        message: Some(format!("Generating OAuth login code for provider: {provider}")),
+        ..Default::default()
+    });
+
+    sentry::configure_scope(|scope| {
+        scope.set_tag("oauth_provider", provider.to_string());
+        scope.set_context("OAuth Flow", sentry::protocol::Context::Other({
+            let mut map = std::collections::BTreeMap::new();
+            map.insert("step".to_string(), "code_exchange".into());
+            map.insert("provider".to_string(), provider.to_string().into());
+            map
+        }));
+    });
+
     let ctx = expect_server_ctx();
     let oauth_impl = ctx
         .oauth_providers
         .get(&provider)
-        .ok_or_else(|| AuthErrorKind::unexpected(format!("provider unavailable: {provider}")))?;
+        .ok_or_else(|| {
+            let err = AuthErrorKind::unexpected(format!("provider unavailable: {provider}"));
+            sentry::capture_message(
+                &format!("OAuth provider unavailable: {provider}"),
+                sentry::Level::Error,
+            );
+            err
+        })?;
     let oauth2 = oauth_impl.get_client();
 
     let token_res = oauth2
         .exchange_code(AuthorizationCode::new(code))
+        .inspect_err(|e| {
+            sentry::capture_error(e);
+            sentry::add_breadcrumb(sentry::Breadcrumb {
+                ty: "error".into(),
+                category: Some("oauth".into()),
+                message: Some("Failed to exchange authorization code".to_string()),
+                ..Default::default()
+            });
+        })
         .map_err(AuthErrorKind::unexpected)?
         .set_pkce_verifier(pkce_verifier)
         .request_async(&ctx.oauth_http_client)
         .await
+        .inspect_err(|e| {
+            sentry::capture_error(e);
+            sentry::add_breadcrumb(sentry::Breadcrumb {
+                ty: "error".into(),
+                category: Some("oauth".into()),
+                message: Some("Failed to request token from OAuth provider".to_string()),
+                ..Default::default()
+            });
+        })
         .map_err(AuthErrorKind::unexpected)?;
 
     let id_token = token_res
         .extra_fields()
         .id_token()
-        .ok_or_else(|| AuthErrorKind::unexpected("Google did not return an ID token"))?;
+        .ok_or_else(|| {
+            let err = AuthErrorKind::unexpected("Google did not return an ID token");
+            sentry::capture_message(
+                "OAuth provider did not return an ID token",
+                sentry::Level::Error,
+            );
+            err
+        })?;
 
     // we don't use a nonce
-    let claims = oauth_impl.verify_id_token(&oauth2, id_token)?;
+    let claims = oauth_impl
+        .verify_id_token(&oauth2, id_token)
+        .inspect_err(|e| {
+            sentry::capture_error(e);
+            sentry::add_breadcrumb(sentry::Breadcrumb {
+                ty: "error".into(),
+                category: Some("oauth".into()),
+                message: Some("Failed to verify ID token".to_string()),
+                ..Default::default()
+            });
+        })?;
     let sub_id = claims.subject();
     let email = claims.email().map(|e| String::from(e.clone()));
+
+    sentry::configure_scope(|scope| {
+        if let Some(ref email) = email {
+            scope.set_user(Some(sentry::User {
+                email: Some(email.clone()),
+                ..Default::default()
+            }));
+        }
+    });
 
     let maybe_principal =
         try_extract_principal_from_oauth_sub(provider, &ctx.kv_store, sub_id, email.as_deref())
@@ -257,13 +397,31 @@ pub async fn perform_oauth_login_impl(
     code: String,
     state: String,
 ) -> Result<String, ServerFnError> {
+    sentry::add_breadcrumb(sentry::Breadcrumb {
+        ty: "info".into(),
+        category: Some("oauth".into()),
+        message: Some("Starting OAuth login flow".to_string()),
+        ..Default::default()
+    });
+
     let ctx = expect_server_ctx();
     let mut jar: PrivateCookieJar = extract_with_state(&ctx.cookie_key).await?;
 
     let csrf_cookie = jar
         .get(CSRF_TOKEN_COOKIE)
-        .ok_or_else(|| ServerFnError::new("csrf token not found"))?;
+        .ok_or_else(|| {
+            let err = ServerFnError::new("csrf token not found");
+            sentry::capture_message(
+                "CSRF token not found in OAuth flow",
+                sentry::Level::Warning,
+            );
+            err
+        })?;
     if state != csrf_cookie.value() {
+        sentry::capture_message(
+            "CSRF token mismatch in OAuth flow",
+            sentry::Level::Warning,
+        );
         return Err(ServerFnError::new("CSRF token mismatch"));
     }
 
@@ -293,16 +451,33 @@ pub async fn perform_oauth_login_impl(
 
     let res = generate_oauth_login_code(code, pkce_verifier, state.provider, query).await;
     match res {
-        Ok(grant) => redirect_uri
-            .query_pairs_mut()
-            .clear()
-            .append_pair("code", &grant)
-            .append_pair("state", &req_state),
-        Err(e) => redirect_uri
-            .query_pairs_mut()
-            .clear()
-            .append_pair("error", &e.to_string())
-            .append_pair("state", &req_state),
+        Ok(grant) => {
+            sentry::add_breadcrumb(sentry::Breadcrumb {
+                ty: "info".into(),
+                category: Some("oauth".into()),
+                message: Some("OAuth login successful".to_string()),
+                ..Default::default()
+            });
+            redirect_uri
+                .query_pairs_mut()
+                .clear()
+                .append_pair("code", &grant)
+                .append_pair("state", &req_state)
+        }
+        Err(ref e) => {
+            sentry::capture_error(e);
+            sentry::add_breadcrumb(sentry::Breadcrumb {
+                ty: "error".into(),
+                category: Some("oauth".into()),
+                message: Some(format!("OAuth login failed: {}", e)),
+                ..Default::default()
+            });
+            redirect_uri
+                .query_pairs_mut()
+                .clear()
+                .append_pair("error", &e.to_string())
+                .append_pair("state", &req_state)
+        }
     };
 
     Ok(redirect_uri.to_string())
