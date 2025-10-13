@@ -10,8 +10,8 @@ use axum::{
 };
 use leptos::{config::get_configuration, logging::log, prelude::provide_context};
 use leptos_axum::{generate_route_list, handle_server_fns_with_context, LeptosRoutes};
-use tower::ServiceBuilder;
 use sentry_tower::{NewSentryLayer, SentryHttpLayer};
+use tower::ServiceBuilder;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use yral_auth_v2::{
