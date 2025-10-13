@@ -10,6 +10,10 @@ use axum::{
 };
 use leptos::{config::get_configuration, logging::log, prelude::provide_context};
 use leptos_axum::{generate_route_list, handle_server_fns_with_context, LeptosRoutes};
+use tower::ServiceBuilder;
+use sentry_tower::{NewSentryLayer, SentryHttpLayer};
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
 use yral_auth_v2::{
     api::server_impl::{
         handle_oauth_token_grant, handle_oidc_configuration, handle_well_known_jwks,
@@ -55,9 +59,26 @@ fn server_routes(ctx: Arc<ServerCtx>) -> Router {
         .layer(Extension(ctx))
 }
 
+fn setup_sentry_subscriber() {
+    tracing_subscriber::registry()
+        .with(sentry_tracing::layer())
+        .with(tracing_subscriber::fmt::layer())
+        .with(tracing_subscriber::EnvFilter::from_default_env())
+        .init();
+}
+
 #[tokio::main]
 async fn main() {
-    simple_logger::init_with_level(log::Level::Debug).expect("couldn't initialize logging");
+    let _guard = sentry::init((
+        "https://c53f9a4a36ea0d767540c5e8ee31f2ee@apm.yral.com/5",
+        sentry::ClientOptions {
+            release: sentry::release_name!(),
+            send_default_pii: true,
+            ..Default::default()
+        },
+    ));
+
+    setup_sentry_subscriber();
 
     let conf = get_configuration(None).unwrap();
     let addr = conf.leptos_options.site_addr;
@@ -74,6 +95,10 @@ async fn main() {
         ctx: ctx.clone(),
     };
 
+    let sentry_tower_layer = ServiceBuilder::new()
+        .layer(NewSentryLayer::new_from_top())
+        .layer(SentryHttpLayer::with_transaction());
+
     let app = Router::new()
         .route(
             "/api/*fn_name",
@@ -82,7 +107,8 @@ async fn main() {
         .leptos_routes_with_handler(routes, get(leptos_routes_handler))
         .fallback(leptos_axum::file_and_error_handler::<ServerState, _>(shell))
         .with_state(app_state)
-        .merge(server_routes(ctx));
+        .merge(server_routes(ctx))
+        .layer(sentry_tower_layer);
 
     // run our app with hyper
     // `axum::Server` is a re-export of `hyper::Server`
