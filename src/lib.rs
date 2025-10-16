@@ -6,6 +6,8 @@ pub mod context;
 pub mod error;
 #[cfg(feature = "ssr")]
 pub mod kv;
+#[cfg(feature = "ssr")]
+pub mod middleware;
 pub mod oauth;
 #[cfg(feature = "ssr")]
 mod oauth_provider;

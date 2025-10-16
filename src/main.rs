@@ -73,7 +73,13 @@ async fn main() {
         "https://12cd069502a3fdb82d39313b26689aee@apm.yral.com/3",
         sentry::ClientOptions {
             release: sentry::release_name!(),
-            send_default_pii: true,
+            traces_sample_rate: std::env::var("SENTRY_TRACES_SAMPLE_RATE")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(0.5),
+            send_default_pii: false, // Keep false, manually add safe data
+            attach_stacktrace: true,
+            before_send: Some(yral_auth_v2::middleware::sentry_scrub::create_before_send()),
             ..Default::default()
         },
     ));
@@ -108,6 +114,9 @@ async fn main() {
         .fallback(leptos_axum::file_and_error_handler::<ServerState, _>(shell))
         .with_state(app_state)
         .merge(server_routes(ctx))
+        .layer(axum::middleware::from_fn(
+            yral_auth_v2::middleware::http_logging_middleware,
+        )) // HTTP logging before Sentry
         .layer(sentry_tower_layer);
 
     // run our app with hyper
