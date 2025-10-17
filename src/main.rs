@@ -16,7 +16,7 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use yral_auth_v2::{
     api::server_impl::{
-        handle_oauth_token_grant, handle_oidc_configuration, handle_well_known_jwks,
+        handle_oauth_token_grant, handle_oidc_configuration, handle_well_known_jwks, healthz,
     },
     app::{shell, App},
     context::server::{ServerCtx, ServerState},
@@ -56,6 +56,7 @@ fn server_routes(ctx: Arc<ServerCtx>) -> Router {
             "/.well-known/openid-configuration",
             get(handle_oidc_configuration),
         )
+        .route("/healthz", get(healthz))
         .layer(Extension(ctx))
 }
 
