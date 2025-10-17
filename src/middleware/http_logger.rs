@@ -33,7 +33,7 @@ fn add_lightweight_breadcrumb(method: &str, path: &str, status: StatusCode, dura
         serde_json::Value::Number((duration_ms as u64).into()),
     );
 
-    sentry::add_breadcrumb(Breadcrumb {
+    sentry::Hub::current().add_breadcrumb(Breadcrumb {
         ty: "http".to_string(),
         category: Some("http.request".to_string()),
         message: Some(format!(
@@ -61,7 +61,7 @@ fn add_request_breadcrumb(method: &str, path: &str) {
         serde_json::Value::String(path.to_string()),
     );
 
-    sentry::add_breadcrumb(Breadcrumb {
+    sentry::Hub::current().add_breadcrumb(Breadcrumb {
         ty: "http".to_string(),
         category: Some("http.request".to_string()),
         message: Some(format!("{} {}", method, path)),
@@ -100,7 +100,7 @@ fn add_response_breadcrumb(status: StatusCode, duration_ms: u128) {
         Level::Info
     };
 
-    sentry::add_breadcrumb(Breadcrumb {
+    sentry::Hub::current().add_breadcrumb(Breadcrumb {
         ty: "http".to_string(),
         category: Some("http.response".to_string()),
         message: Some(format!("{} ({}ms)", status.as_u16(), duration_ms)),
@@ -138,6 +138,13 @@ pub async fn http_logging_middleware(request: Request, next: Next) -> Response {
 
     // Only add detailed breadcrumbs for errors
     if status.as_u16() >= 400 {
+        log::error!(
+            "HTTP Error: {} {} -> {} ({}ms)",
+            method,
+            path,
+            status.as_u16(),
+            duration_ms
+        );
         add_request_breadcrumb(&method, &path);
         add_response_breadcrumb(status, duration_ms);
     } else {
