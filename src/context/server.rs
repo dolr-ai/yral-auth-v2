@@ -336,10 +336,9 @@ impl ServerCtx {
                                 Ok(()) => {
                                     tracing::info!("Successfully refreshed Google OAuth JWKs")
                                 }
-                                Err(e) => tracing::error!(
-                                    "Failed to refresh Google OAuth JWKs: {}",
-                                    e
-                                ),
+                                Err(e) => {
+                                    tracing::error!("Failed to refresh Google OAuth JWKs: {}", e)
+                                }
                             }
                         } else {
                             tracing::debug!("Google OAuth JWKs are still fresh");
