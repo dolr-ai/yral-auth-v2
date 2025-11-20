@@ -1,4 +1,8 @@
 #[cfg(feature = "ssr")]
+pub mod jwk_cache;
+#[cfg(feature = "ssr")]
+pub mod jwk_rotation;
+#[cfg(feature = "ssr")]
 pub mod jwt;
 
 use std::{

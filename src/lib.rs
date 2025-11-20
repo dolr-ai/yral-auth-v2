@@ -10,7 +10,7 @@ pub mod kv;
 pub mod middleware;
 pub mod oauth;
 #[cfg(feature = "ssr")]
-mod oauth_provider;
+pub mod oauth_provider;
 mod page;
 pub mod utils;
 

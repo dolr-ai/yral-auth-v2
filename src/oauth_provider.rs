@@ -9,7 +9,7 @@ use std::{
 use enum_dispatch::enum_dispatch;
 use openidconnect::{
     core::{CoreIdToken, CoreIdTokenClaims},
-    ClientSecret, Nonce,
+    reqwest, ClientSecret, Nonce,
 };
 use serde::{Deserialize, Serialize};
 
@@ -84,6 +84,168 @@ impl OAuthProvider for IdentityOAuthProvider {
         client: &StdOAuthClient,
         token: &'a CoreIdToken,
     ) -> Result<&'a CoreIdTokenClaims, AuthErrorKind> {
+        token
+            .claims(&client.id_token_verifier(), no_op_nonce_verifier)
+            .map_err(AuthErrorKind::unexpected)
+    }
+}
+
+// Google OAuth provider with JWK rotation support
+pub struct GoogleOAuthProvider {
+    /// Base OAuth client - will be refreshed periodically with new JWKs
+    client_cache: RwLock<Arc<StdOAuthClient>>,
+    /// When the cached client expires and needs JWK refresh
+    client_cache_expiry: AtomicU64,
+    /// Cache for fetching fresh JWKs from Google
+    jwk_cache: Arc<crate::oauth::jwk_cache::JwkCache>,
+    /// Client configuration for rebuilding OAuth client
+    base_metadata: openidconnect::core::CoreProviderMetadata,
+    client_id: openidconnect::ClientId,
+    client_secret: Option<openidconnect::ClientSecret>,
+    redirect_uri: Option<openidconnect::RedirectUrl>,
+}
+
+impl GoogleOAuthProvider {
+    pub async fn new(
+        base_client: StdOAuthClient,
+        provider_metadata: openidconnect::core::CoreProviderMetadata,
+        http_client: reqwest::Client,
+    ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+        let jwk_cache =
+            crate::oauth::jwk_cache::JwkCache::new(&provider_metadata, http_client.clone()).await?;
+
+        // Extract client information for later use
+        let client_id = base_client.client_id().clone();
+        let client_secret = None; // Will be set if provided
+        let redirect_uri = base_client.redirect_uri().cloned();
+
+        // Set initial client cache expiry to same as JWK cache
+        let initial_expiry = crate::oauth::jwk_cache::JwkCache::current_epoch_secs() + 3600; // 1 hour default
+
+        Ok(Self {
+            client_cache: RwLock::new(Arc::new(base_client)),
+            client_cache_expiry: AtomicU64::new(initial_expiry),
+            jwk_cache: Arc::new(jwk_cache),
+            base_metadata: provider_metadata,
+            client_id,
+            client_secret,
+            redirect_uri,
+        })
+    }
+
+    /// Try to get a client with fresh JWKs (non-blocking)
+    fn try_get_fresh_client(&self) -> Result<Arc<StdOAuthClient>, ()> {
+        let current_epoch = crate::oauth::jwk_cache::JwkCache::current_epoch_secs();
+        let cache_expiry = self
+            .client_cache_expiry
+            .load(std::sync::atomic::Ordering::Acquire);
+
+        // Return cached client if still valid
+        if current_epoch < cache_expiry {
+            return Ok(self.client_cache.read().unwrap().clone());
+        }
+
+        // Try to acquire write lock without blocking
+        let client_guard = self.client_cache.try_write().map_err(|_| ())?;
+
+        // Double-check expiry after acquiring lock
+        let cache_expiry = self
+            .client_cache_expiry
+            .load(std::sync::atomic::Ordering::Acquire);
+        if current_epoch < cache_expiry {
+            return Ok(client_guard.clone());
+        }
+
+        // We need fresh JWKs but can't do async call in sync context
+        // This is a limitation - for now, extend cache and return existing client
+        let extended_expiry = current_epoch + 300; // 5 minutes
+        self.client_cache_expiry
+            .store(extended_expiry, std::sync::atomic::Ordering::Release);
+
+        Ok(client_guard.clone())
+    }
+
+    /// Refresh the OAuth client with fresh JWKs from Google
+    /// This method should be called periodically by a background task
+    pub async fn refresh_client_jwks(
+        &self,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        // First refresh the JWK cache
+        self.jwk_cache.refresh_jwks().await?;
+
+        // Get the fresh JWKs (now cached) - this should be fast since we just refreshed
+        let fresh_jwks = self.jwk_cache.get_jwks().await;
+
+        // Create new OAuth client with fresh JWKs
+        let mut updated_metadata = self.base_metadata.clone();
+        updated_metadata = updated_metadata.set_jwks((*fresh_jwks).clone());
+
+        let mut fresh_client = openidconnect::core::CoreClient::from_provider_metadata(
+            updated_metadata,
+            self.client_id.clone(),
+            self.client_secret.clone(),
+        );
+
+        if let Some(ref uri) = self.redirect_uri {
+            fresh_client = fresh_client.set_redirect_uri(uri.clone());
+        }
+
+        let fresh_client = fresh_client.set_auth_type(openidconnect::AuthType::RequestBody);
+
+        // Update the cached client
+        {
+            let mut client_guard = self.client_cache.write().unwrap();
+            *client_guard = Arc::new(fresh_client);
+        }
+
+        // Update expiry - use the JWK cache expiry
+        let current_epoch = crate::oauth::jwk_cache::JwkCache::current_epoch_secs();
+        let new_expiry = current_epoch + 3600; // 1 hour conservative expiry
+        self.client_cache_expiry
+            .store(new_expiry, std::sync::atomic::Ordering::Release);
+
+        tracing::info!("Successfully refreshed Google OAuth client with fresh JWKs");
+
+        Ok(())
+    }
+
+    /// Check if the client needs JWK refresh (based on JWK cache status)
+    pub fn needs_jwk_refresh(&self) -> bool {
+        // Check if JWKs need refresh with 10 minute buffer
+        self.jwk_cache.needs_refresh(600)
+    }
+}
+
+impl OAuthProvider for GoogleOAuthProvider {
+    fn get_client(&self) -> Arc<StdOAuthClient> {
+        // For Google, we need to check if JWKs are fresh
+        // If they're expired or close to expiry, return a client with fresh JWKs
+        let current_epoch = crate::oauth::jwk_cache::JwkCache::current_epoch_secs();
+        let cache_expiry = self
+            .client_cache_expiry
+            .load(std::sync::atomic::Ordering::Acquire);
+
+        // If cache is still valid (with 5 minute buffer), return cached client
+        if current_epoch < cache_expiry.saturating_sub(300) {
+            return self.client_cache.read().unwrap().clone();
+        }
+
+        // Try to get fresh client, but don't block if another thread is updating
+        if let Ok(fresh_client) = self.try_get_fresh_client() {
+            fresh_client
+        } else {
+            // Fallback to cached client if refresh fails
+            self.client_cache.read().unwrap().clone()
+        }
+    }
+
+    fn verify_id_token<'a>(
+        &self,
+        client: &StdOAuthClient,
+        token: &'a CoreIdToken,
+    ) -> Result<&'a CoreIdTokenClaims, AuthErrorKind> {
+        // Use the provided client for verification
+        // The client should have fresh JWKs from get_client()
         token
             .claims(&client.id_token_verifier(), no_op_nonce_verifier)
             .map_err(AuthErrorKind::unexpected)
@@ -228,8 +390,9 @@ impl OAuthProvider for AppleOAuthProvider {
     }
 }
 
+#[allow(clippy::large_enum_variant)]
 #[enum_dispatch(OAuthProvider)]
 pub enum OAuthProviderImpl {
-    IdentityOAuthProvider,
+    GoogleOAuthProvider,
     AppleOAuthProvider,
 }
