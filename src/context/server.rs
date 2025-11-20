@@ -17,9 +17,7 @@ use crate::{
     oauth::{
         client_validation::ClientIdValidatorImpl, jwt::JsonWebKeySet, SupportedOAuthProviders,
     },
-    oauth_provider::{
-        AppleOAuthProvider, IdentityOAuthProvider, OAuthProviderImpl, StdOAuthClient,
-    },
+    oauth_provider::{AppleOAuthProvider, GoogleOAuthProvider, OAuthProviderImpl, StdOAuthClient},
 };
 
 #[derive(FromRef, Clone)]
@@ -123,6 +121,7 @@ pub struct ServerCtx {
 }
 
 impl ServerCtx {
+    #[allow(dead_code)]
     async fn init_oauth_client(
         client_id_env: &str,
         issuer_url: IssuerUrl,
@@ -144,6 +143,11 @@ impl ServerCtx {
         Ok(client)
     }
 
+    /// Initialize Google OAuth client with JWK rotation support
+    ///
+    /// This creates a GoogleOAuthProvider that handles JWK rotation automatically.
+    /// Google rotates their JWT signing keys regularly, and this provider respects
+    /// the Cache-Control headers from Google's JWK endpoint to refresh keys appropriately.
     async fn init_google_oauth_client(
         http_client: &reqwest::Client,
         redirect_uri: &RedirectUrl,
@@ -151,17 +155,31 @@ impl ServerCtx {
     ) -> Result<(), String> {
         let google_client_secret =
             env::var("GOOGLE_CLIENT_SECRET").expect("`GOOGLE_CLIENT_SECRET` is required!");
+        let client_id = env::var("GOOGLE_CLIENT_ID").expect("`GOOGLE_CLIENT_ID` is required!");
 
-        let google_oauth = Self::init_oauth_client(
-            "GOOGLE_CLIENT_ID",
-            IssuerUrl::new(GOOGLE_ISSUER_URL.to_string()).unwrap(),
-            redirect_uri.clone(),
-            http_client,
+        let issuer_url = IssuerUrl::new(GOOGLE_ISSUER_URL.to_string()).unwrap();
+
+        // Discover OAuth metadata
+        let oauth_metadata = CoreProviderMetadata::discover_async(issuer_url, http_client)
+            .await
+            .map_err(|e| format!("Failed to discover Google OAuth metadata: {e}"))?;
+
+        // Create OAuth client
+        let google_oauth_client = CoreClient::from_provider_metadata(
+            oauth_metadata.clone(),
+            ClientId::new(client_id),
+            None,
         )
-        .await?
+        .set_redirect_uri(redirect_uri.clone())
+        .set_auth_type(openidconnect::AuthType::RequestBody)
         .set_client_secret(ClientSecret::new(google_client_secret));
 
-        let google_oauth = IdentityOAuthProvider::new(google_oauth);
+        // Create Google provider with JWK caching
+        let google_oauth =
+            GoogleOAuthProvider::new(google_oauth_client, oauth_metadata, http_client.clone())
+                .await
+                .map_err(|e| format!("Failed to create Google OAuth provider: {e}"))?;
+
         oauth_providers.insert(SupportedOAuthProviders::Google, google_oauth.into());
 
         Ok(())
@@ -290,6 +308,48 @@ impl ServerCtx {
             jwk_pairs: JwkPairs::default(),
             kv_store,
             validator: ClientIdValidatorImpl::Const(Default::default()),
+        }
+    }
+
+    /// Start background JWK refresh task for OAuth providers that support it
+    pub fn start_jwk_refresh_task(self: &Arc<Self>) {
+        // For now, we'll check Google OAuth provider and start a task that
+        // calls the refresh method periodically
+        if self
+            .oauth_providers
+            .contains_key(&SupportedOAuthProviders::Google)
+        {
+            let ctx = Arc::clone(self);
+            let _handle = tokio::spawn(async move {
+                let mut interval = tokio::time::interval(std::time::Duration::from_secs(5 * 60)); // 5 minutes
+
+                loop {
+                    interval.tick().await;
+
+                    if let Some(crate::oauth_provider::OAuthProviderImpl::GoogleOAuthProvider(
+                        google_provider,
+                    )) = ctx.oauth_providers.get(&SupportedOAuthProviders::Google)
+                    {
+                        if google_provider.needs_jwk_refresh() {
+                            tracing::info!("Refreshing Google OAuth JWKs...");
+                            match google_provider.refresh_client_jwks().await {
+                                Ok(()) => {
+                                    tracing::info!("Successfully refreshed Google OAuth JWKs")
+                                }
+                                Err(e) => tracing::error!(
+                                    "Failed to refresh Google OAuth JWKs: {}",
+                                    e
+                                ),
+                            }
+                        } else {
+                            tracing::debug!("Google OAuth JWKs are still fresh");
+                        }
+                    }
+                }
+            });
+            tracing::info!("Started Google OAuth JWK refresh background task");
+        } else {
+            tracing::info!("No Google OAuth provider configured, skipping JWK refresh task");
         }
     }
 }
