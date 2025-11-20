@@ -14,20 +14,12 @@ pub struct JwkRotationConfig {
     /// How often to check if JWKs need refreshing (default: 5 minutes)
     pub check_interval: Duration,
 
-    /// Minimum time before expiry to refresh JWKs (default: 10 minutes)
-    /// This ensures we refresh before the cache actually expires
-    pub refresh_buffer: Duration,
-
-    /// How long to extend cache on fetch failure (default: 5 minutes)
-    pub failure_extension: Duration,
 }
 
 impl Default for JwkRotationConfig {
     fn default() -> Self {
         Self {
             check_interval: Duration::from_secs(5 * 60),  // 5 minutes
-            refresh_buffer: Duration::from_secs(10 * 60), // 10 minutes
-            failure_extension: Duration::from_secs(5 * 60), // 5 minutes
         }
     }
 }
