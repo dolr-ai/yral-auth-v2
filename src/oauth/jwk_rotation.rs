@@ -13,13 +13,12 @@ use std::time::Duration;
 pub struct JwkRotationConfig {
     /// How often to check if JWKs need refreshing (default: 5 minutes)
     pub check_interval: Duration,
-
 }
 
 impl Default for JwkRotationConfig {
     fn default() -> Self {
         Self {
-            check_interval: Duration::from_secs(5 * 60),  // 5 minutes
+            check_interval: Duration::from_secs(5 * 60), // 5 minutes
         }
     }
 }
