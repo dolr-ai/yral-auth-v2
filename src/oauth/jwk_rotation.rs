@@ -39,17 +39,20 @@ pub fn start_jwk_refresh_task(
         loop {
             interval.tick().await;
 
+            println!("JWK refresh task checking for updates...");
             // Check if the Google OAuth client needs JWK refresh
             if google_provider.needs_jwk_refresh() {
                 tracing::info!("Google OAuth client JWKs need refresh, updating...");
 
                 match google_provider.refresh_client_jwks().await {
                     Ok(()) => {
+                        println!("Successfully refreshed Google OAuth JWKs");
                         tracing::info!("Successfully refreshed Google OAuth JWKs");
                     }
                     Err(e) => {
                         tracing::error!("Failed to refresh Google OAuth JWKs: {}", e);
                         // Continue the loop to try again later
+                        println!("Failed to refresh Google OAuth JWKs: {e}");
                     }
                 }
             } else {
