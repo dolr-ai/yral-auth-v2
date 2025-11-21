@@ -64,7 +64,7 @@ fn add_request_breadcrumb(method: &str, path: &str) {
     sentry::Hub::current().add_breadcrumb(Breadcrumb {
         ty: "http".to_string(),
         category: Some("http.request".to_string()),
-        message: Some(format!("{} {}", method, path)),
+        message: Some(format!("{method} {path}")),
         data,
         level: Level::Info,
         ..Default::default()

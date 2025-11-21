@@ -96,6 +96,11 @@ async fn main() {
     dotenvy::dotenv().ok();
 
     let ctx = Arc::new(ServerCtx::new().await);
+
+    // Start background JWK refresh task for Google OAuth
+    ctx.start_jwk_refresh_task();
+    tracing::info!("Started JWK refresh background task");
+
     let app_state = ServerState {
         leptos_options,
         routes: routes.clone(),
