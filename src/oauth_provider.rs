@@ -110,13 +110,13 @@ impl GoogleOAuthProvider {
         base_client: StdOAuthClient,
         provider_metadata: openidconnect::core::CoreProviderMetadata,
         http_client: reqwest::Client,
+        client_secret: String,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let jwk_cache =
             crate::oauth::jwk_cache::JwkCache::new(&provider_metadata, http_client.clone()).await?;
 
         // Extract client information for later use
         let client_id = base_client.client_id().clone();
-        let client_secret = None; // Will be set if provided
         let redirect_uri = base_client.redirect_uri().cloned();
 
         // Set initial client cache expiry to same as JWK cache
@@ -128,7 +128,7 @@ impl GoogleOAuthProvider {
             jwk_cache: Arc::new(jwk_cache),
             base_metadata: provider_metadata,
             client_id,
-            client_secret,
+            client_secret: Some(ClientSecret::new(client_secret)),
             redirect_uri,
         })
     }

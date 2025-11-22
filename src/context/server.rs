@@ -172,13 +172,17 @@ impl ServerCtx {
         )
         .set_redirect_uri(redirect_uri.clone())
         .set_auth_type(openidconnect::AuthType::RequestBody)
-        .set_client_secret(ClientSecret::new(google_client_secret));
+        .set_client_secret(ClientSecret::new(google_client_secret.clone()));
 
         // Create Google provider with JWK caching
-        let google_oauth =
-            GoogleOAuthProvider::new(google_oauth_client, oauth_metadata, http_client.clone())
-                .await
-                .map_err(|e| format!("Failed to create Google OAuth provider: {e}"))?;
+        let google_oauth = GoogleOAuthProvider::new(
+            google_oauth_client,
+            oauth_metadata,
+            http_client.clone(),
+            google_client_secret,
+        )
+        .await
+        .map_err(|e| format!("Failed to create Google OAuth provider: {e}"))?;
 
         oauth_providers.insert(SupportedOAuthProviders::Google, google_oauth.into());
 
