@@ -326,30 +326,30 @@ impl ServerCtx {
                 loop {
                     interval.tick().await;
 
-                    log::info!("JWK refresh task checking for updates...");
+                    println!("JWK refresh task checking for updates...");
                     if let Some(crate::oauth_provider::OAuthProviderImpl::GoogleOAuthProvider(
                         google_provider,
                     )) = ctx.oauth_providers.get(&SupportedOAuthProviders::Google)
                     {
                         if google_provider.needs_jwk_refresh() {
-                            log::info!("Refreshing Google OAuth JWKs...");
+                            println!("Refreshing Google OAuth JWKs...");
                             match google_provider.refresh_client_jwks().await {
                                 Ok(()) => {
-                                    log::info!("Successfully refreshed Google OAuth JWKs");
+                                    println!("Successfully refreshed Google OAuth JWKs");
                                 }
                                 Err(e) => {
-                                    log::error!("Failed to refresh Google OAuth JWKs: {e}");
+                                    eprintln!("Failed to refresh Google OAuth JWKs: {e}");
                                 }
                             }
                         } else {
-                            log::info!("Google OAuth JWKs are still fresh");
+                            println!("Google OAuth JWKs are still fresh");
                         }
                     }
                 }
             });
-            log::info!("Started Google OAuth JWK refresh background task");
+            println!("Started Google OAuth JWK refresh background task");
         } else {
-            log::info!("No Google OAuth provider configured, skipping JWK refresh task");
+            println!("No Google OAuth provider configured, skipping JWK refresh task");
         }
     }
 }

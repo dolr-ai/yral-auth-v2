@@ -99,7 +99,7 @@ async fn main() {
 
     // Start background JWK refresh task for Google OAuth
     ctx.start_jwk_refresh_task();
-    tracing::info!("Started JWK refresh background task");
+    println!("Started JWK refresh background task");
 
     let app_state = ServerState {
         leptos_options,
