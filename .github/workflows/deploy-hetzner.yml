@@ -1,0 +1,212 @@
+name: Deploy to Hetzner Bare Metal (Docker Swarm)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: deploy-hetzner-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  DOCKER_REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}/yral-auth-v2
+  PROXY_IMAGE_NAME: ${{ github.repository }}/fly-redis-proxy
+
+jobs:
+  build_check:
+    uses: ./.github/workflows/build-check.yml
+    with:
+      publish-artifact: true
+
+  build-and-push:
+    name: Build and Push Docker Images
+    needs: build_check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    outputs:
+      image_tag: ${{ steps.meta.outputs.tags }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: build-musl
+
+      - name: Make binary executable
+        run: chmod +x target/x86_64-unknown-linux-musl/release/yral-auth-v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.DOCKER_REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata for yral-auth-v2
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,prefix=
+            type=raw,value=latest
+
+      - name: Extract metadata for fly-redis-proxy
+        id: meta-proxy
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.DOCKER_REGISTRY }}/${{ env.PROXY_IMAGE_NAME }}
+          tags: |
+            type=sha,prefix=
+            type=raw,value=latest
+
+      - name: Build and push yral-auth-v2 image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./deploy/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push fly-redis-proxy image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./deploy/fly-redis-proxy
+          file: ./deploy/fly-redis-proxy/Dockerfile
+          push: true
+          tags: ${{ steps.meta-proxy.outputs.tags }}
+          labels: ${{ steps.meta-proxy.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    name: Deploy to Hetzner
+    needs: build-and-push
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.HETZNER_SSH_PRIVATE_KEY }}
+
+      - name: Add server to known hosts
+        run: |
+          ssh-keyscan -H 138.201.196.246 >> ~/.ssh/known_hosts
+
+      - name: Check server connectivity
+        run: |
+          ssh -o ConnectTimeout=10 root@138.201.196.246 "echo 'Server connection successful'"
+
+      - name: Initialize Docker Swarm (if needed)
+        run: |
+          ssh root@138.201.196.246 "
+            if ! docker info 2>/dev/null | grep -q 'Swarm: active'; then
+              echo 'Initializing Docker Swarm...'
+              docker swarm init --advertise-addr \$(hostname -I | awk '{print \$1}')
+            else
+              echo 'Docker Swarm already initialized'
+            fi
+          "
+
+      - name: Create Docker Swarm secrets
+        run: |
+          ssh root@138.201.196.246 "
+            # Function to create or update a secret
+            create_secret() {
+              local name=\$1
+              local value=\$2
+              if docker secret inspect \$name >/dev/null 2>&1; then
+                echo \"Updating secret: \$name\"
+                docker secret rm \$name
+              fi
+              echo \"\$value\" | docker secret create \$name -
+              echo \"Created secret: \$name\"
+            }
+
+            create_secret 'cookie_key' '${{ secrets.AUTH_SESSION_COOKIE_SIGNING_SECRET_KEY }}'
+            create_secret 'google_client_secret' '${{ secrets.GOOGLE_SIGNING_OAUTH_CLIENT_CREDENTIAL_CLIENT_SECRET }}'
+            create_secret 'jwt_ec_pem' '${{ secrets.AUTH_JWT_ES256_SIGNING_SECRET_KEY_PEM }}'
+            create_secret 'client_jwt_ed_pem' '${{ secrets.CLIENT_JWT_ED_PEM }}'
+            create_secret 'apple_auth_key_pem' '${{ secrets.APPLE_AUTH_KEY_PEM }}'
+            create_secret 'fly_token' '${{ secrets.HETZNER_FLY_API_TOKEN }}'
+            create_secret 'redis_password' '${{ secrets.HETZNER_FLY_REDIS_PASSWORD }}'
+          "
+
+      - name: Sync deployment files to server
+        run: |
+          rsync -avz --delete \
+            ./deploy/ \
+            root@138.201.196.246:/home/yral-auth/
+
+      - name: Log in to GitHub Container Registry on server
+        run: |
+          ssh root@138.201.196.246 "
+            echo '${{ secrets.GITHUB_TOKEN }}' | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+          "
+
+      - name: Deploy stack to Docker Swarm
+        run: |
+          ssh root@138.201.196.246 "
+            cd /home/yral-auth
+
+            # Set image tag
+            export IMAGE_TAG=${{ github.sha }}
+            export DOCKER_REGISTRY=ghcr.io/${{ github.repository }}
+
+            echo 'Pulling latest images...'
+            docker compose -f docker-compose.yml pull || true
+
+            echo 'Deploying stack...'
+            docker stack deploy -c docker-compose.yml yral-auth --with-registry-auth
+
+            echo 'Waiting for services to start...'
+            sleep 15
+
+            echo 'Stack services status:'
+            docker stack services yral-auth
+          "
+
+      - name: Verify deployment
+        run: |
+          ssh root@138.201.196.246 "
+            echo '=== Stack Services ==='
+            docker stack services yral-auth
+
+            echo ''
+            echo '=== Service Tasks ==='
+            docker stack ps yral-auth
+
+            echo ''
+            echo '=== Container Logs (last 20 lines) ==='
+            docker service logs yral-auth_yral-auth --tail=20 2>/dev/null || echo 'Logs not yet available'
+          "
+
+      - name: Deployment summary
+        run: |
+          echo "## Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- **Target Server**: 138.201.196.246" >> $GITHUB_STEP_SUMMARY
+          echo "- **Deployment Method**: Docker Swarm" >> $GITHUB_STEP_SUMMARY
+          echo "- **Images**:" >> $GITHUB_STEP_SUMMARY
+          echo "  - ghcr.io/${{ github.repository }}/yral-auth-v2:${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "  - ghcr.io/${{ github.repository }}/fly-redis-proxy:${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Services**: fly-redis-proxy, yral-auth, caddy" >> $GITHUB_STEP_SUMMARY
+          echo "- **Secrets**: Managed via Docker Swarm secrets" >> $GITHUB_STEP_SUMMARY

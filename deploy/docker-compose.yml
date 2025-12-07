@@ -1,0 +1,126 @@
+version: "3.9"
+
+services:
+  fly-redis-proxy:
+    image: ${DOCKER_REGISTRY:-ghcr.io/yral-dapp}/fly-redis-proxy:${IMAGE_TAG:-latest}
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 64M
+    secrets:
+      - fly_token
+    networks:
+      - yral-net
+    healthcheck:
+      test: ["CMD", "nc", "-z", "127.0.0.1", "16379"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+
+  yral-auth:
+    image: ${DOCKER_REGISTRY:-ghcr.io/yral-dapp}/yral-auth-v2:${IMAGE_TAG:-latest}
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 256M
+    environment:
+      # Public environment variables (non-sensitive)
+      - PORT=8080
+      - GOOGLE_CLIENT_ID=804814798298-taifmq3k6olk9bjr1cqb9gfnp1mssqqb.apps.googleusercontent.com
+      - APPLE_CLIENT_ID=com.yral.yral-auth
+      - APPLE_TEAM_ID=2UL556KNXC
+      - APPLE_KEY_ID=9DWVYWDYD8
+      - JWT_PUB_EC_PEM=-----BEGIN PUBLIC KEY-----
+        MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEoqN3/0RNfrnrnYGxKBgy/qHnmITr
+        +6ucjxStx7tjA30QJZlWzo0atxmY8y9dUR+eKQI0SnbQds4xLEU8+JGm8Q==
+        -----END PUBLIC KEY-----
+      - CLIENT_JWT_PUB_ED_PEM=-----BEGIN PUBLIC KEY-----
+        MCowBQYDK2VwAyEAKpZNfPOONR9AXiaGmHv8AHemm4SNK0uh+mf523ho5KU=
+        -----END PUBLIC KEY-----
+      - SERVER_URL=${SERVER_URL:-https://auth.yral.com/}
+      # Leptos configuration
+      - LEPTOS_OUTPUT_NAME=yral-auth-v2
+      - LEPTOS_SITE_ROOT=site
+      - LEPTOS_SITE_PKG_DIR=pkg
+      - LEPTOS_SITE_ADDR=0.0.0.0:8080
+      - LEPTOS_ENV=PROD
+    secrets:
+      - cookie_key
+      - google_client_secret
+      - jwt_ec_pem
+      - client_jwt_ed_pem
+      - apple_auth_key_pem
+      - redis_password
+    networks:
+      - yral-net
+    depends_on:
+      - fly-redis-proxy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+    configs:
+      - source: caddyfile
+        target: /etc/caddy/Caddyfile
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+    networks:
+      - yral-net
+    depends_on:
+      - yral-auth
+
+networks:
+  yral-net:
+    driver: overlay
+
+volumes:
+  caddy_data:
+  caddy_config:
+
+configs:
+  caddyfile:
+    file: ./Caddyfile
+
+secrets:
+  cookie_key:
+    external: true
+  google_client_secret:
+    external: true
+  jwt_ec_pem:
+    external: true
+  client_jwt_ed_pem:
+    external: true
+  apple_auth_key_pem:
+    external: true
+  fly_token:
+    external: true
+  redis_password:
+    external: true
