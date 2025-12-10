@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - joel/fly-migration
+      - main
 
 concurrency:
   group: deploy-hetzner-${{ github.ref }}
