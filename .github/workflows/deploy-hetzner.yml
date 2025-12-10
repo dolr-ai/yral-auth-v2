@@ -2,6 +2,9 @@ name: Deploy to Hetzner Bare Metal
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - joel/fly-migration
 
 concurrency:
   group: deploy-hetzner-${{ github.ref }}
