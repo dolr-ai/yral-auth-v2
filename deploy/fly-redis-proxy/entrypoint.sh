@@ -1,12 +1,9 @@
 #!/bin/sh
 set -e
 
-# Load Fly token from Docker secret
-if [ -f /run/secrets/fly_token ]; then
-    export FLY_API_TOKEN=$(cat /run/secrets/fly_token)
-    echo "Loaded FLY_API_TOKEN from secret"
-else
-    echo "Error: fly_token secret not found"
+# FLY_API_TOKEN is passed as environment variable
+if [ -z "$FLY_API_TOKEN" ]; then
+    echo "Error: FLY_API_TOKEN environment variable not set"
     exit 1
 fi
 

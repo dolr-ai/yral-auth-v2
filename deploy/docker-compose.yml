@@ -3,19 +3,9 @@ version: "3.9"
 services:
   fly-redis-proxy:
     image: ${DOCKER_REGISTRY:-ghcr.io/yral-dapp}/fly-redis-proxy:${IMAGE_TAG:-latest}
-    deploy:
-      replicas: 1
-      restart_policy:
-        condition: on-failure
-        delay: 5s
-        max_attempts: 3
-      resources:
-        limits:
-          memory: 256M
-        reservations:
-          memory: 64M
-    secrets:
-      - fly_token
+    restart: unless-stopped
+    environment:
+      - FLY_API_TOKEN=${FLY_API_TOKEN}
     networks:
       - yral-net
     healthcheck:
@@ -27,18 +17,15 @@ services:
 
   yral-auth:
     image: ${DOCKER_REGISTRY:-ghcr.io/yral-dapp}/yral-auth-v2:${IMAGE_TAG:-latest}
-    deploy:
-      replicas: 1
-      restart_policy:
-        condition: on-failure
-        delay: 5s
-        max_attempts: 3
-      resources:
-        limits:
-          memory: 1G
-        reservations:
-          memory: 256M
+    restart: unless-stopped
     environment:
+      # Secrets (injected at runtime)
+      - COOKIE_KEY=${COOKIE_KEY}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - JWT_EC_PEM=${JWT_EC_PEM}
+      - CLIENT_JWT_ED_PEM=${CLIENT_JWT_ED_PEM}
+      - APPLE_AUTH_KEY_PEM=${APPLE_AUTH_KEY_PEM}
+      - REDIS_URL=redis://default:${REDIS_PASSWORD}@fly-redis-proxy:16379
       # Public environment variables (non-sensitive)
       - PORT=8080
       - GOOGLE_CLIENT_ID=804814798298-taifmq3k6olk9bjr1cqb9gfnp1mssqqb.apps.googleusercontent.com
@@ -59,39 +46,21 @@ services:
       - LEPTOS_SITE_PKG_DIR=pkg
       - LEPTOS_SITE_ADDR=0.0.0.0:8080
       - LEPTOS_ENV=PROD
-    secrets:
-      - cookie_key
-      - google_client_secret
-      - jwt_ec_pem
-      - client_jwt_ed_pem
-      - apple_auth_key_pem
-      - redis_password
     networks:
       - yral-net
     depends_on:
       - fly-redis-proxy
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/healthz"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
 
   caddy:
     image: caddy:2-alpine
+    restart: unless-stopped
     ports:
       - "80:80"
       - "443:443"
     volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
-    configs:
-      - source: caddyfile
-        target: /etc/caddy/Caddyfile
-    deploy:
-      replicas: 1
-      restart_policy:
-        condition: on-failure
     networks:
       - yral-net
     depends_on:
@@ -99,28 +68,8 @@ services:
 
 networks:
   yral-net:
-    driver: overlay
+    driver: bridge
 
 volumes:
   caddy_data:
   caddy_config:
-
-configs:
-  caddyfile:
-    file: ./Caddyfile
-
-secrets:
-  cookie_key:
-    external: true
-  google_client_secret:
-    external: true
-  jwt_ec_pem:
-    external: true
-  client_jwt_ed_pem:
-    external: true
-  apple_auth_key_pem:
-    external: true
-  fly_token:
-    external: true
-  redis_password:
-    external: true
