@@ -12,8 +12,8 @@ concurrency:
 
 env:
   DOCKER_REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}/yral-auth-v2
-  PROXY_IMAGE_NAME: ${{ github.repository }}/fly-redis-proxy
+  IMAGE_NAME: ${{ github.repository }}
+  PROXY_IMAGE_NAME: ${{ github.repository_owner }}/fly-redis-proxy
 
 jobs:
   build_check:
@@ -164,7 +164,8 @@ jobs:
             cd /home/yral-auth
 
             echo 'Pulling latest images...'
-            DOCKER_REGISTRY=ghcr.io/${{ github.repository }} \
+            APP_IMAGE=ghcr.io/${{ github.repository }} \
+            PROXY_IMAGE=ghcr.io/${{ github.repository_owner }}/fly-redis-proxy \
             IMAGE_TAG=${{ github.sha }} \
             docker compose pull
 
@@ -172,7 +173,8 @@ jobs:
             docker compose down --remove-orphans || true
 
             echo 'Starting services...'
-            DOCKER_REGISTRY=ghcr.io/${{ github.repository }} \
+            APP_IMAGE=ghcr.io/${{ github.repository }} \
+            PROXY_IMAGE=ghcr.io/${{ github.repository_owner }}/fly-redis-proxy \
             IMAGE_TAG=${{ github.sha }} \
             COOKIE_KEY='${{ secrets.AUTH_SESSION_COOKIE_SIGNING_SECRET_KEY }}' \
             GOOGLE_CLIENT_SECRET='${{ secrets.GOOGLE_SIGNING_OAUTH_CLIENT_CREDENTIAL_CLIENT_SECRET }}' \
@@ -209,7 +211,7 @@ jobs:
           echo "- **Target Server**: 138.201.196.246" >> $GITHUB_STEP_SUMMARY
           echo "- **Deployment Method**: Docker Compose" >> $GITHUB_STEP_SUMMARY
           echo "- **Images**:" >> $GITHUB_STEP_SUMMARY
-          echo "  - ghcr.io/${{ github.repository }}/yral-auth-v2:${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
-          echo "  - ghcr.io/${{ github.repository }}/fly-redis-proxy:${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "  - ghcr.io/${{ github.repository }}:${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "  - ghcr.io/${{ github.repository_owner }}/fly-redis-proxy:${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Services**: fly-redis-proxy, yral-auth, caddy" >> $GITHUB_STEP_SUMMARY
           echo "- **Secrets**: Injected via environment variables at runtime" >> $GITHUB_STEP_SUMMARY
