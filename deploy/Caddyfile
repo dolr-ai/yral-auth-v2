@@ -1,9 +1,6 @@
 {
     # Global options
     email admin@yral.com
-
-    # Enable automatic HTTPS
-    auto_https on
 }
 
 # Main auth domain
