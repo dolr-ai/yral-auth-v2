@@ -60,7 +60,7 @@ jobs:
         with:
           images: ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=sha,prefix=
+            type=sha,format=long,prefix=
             type=raw,value=latest
 
       - name: Extract metadata for fly-redis-proxy
@@ -69,7 +69,7 @@ jobs:
         with:
           images: ${{ env.DOCKER_REGISTRY }}/${{ env.PROXY_IMAGE_NAME }}
           tags: |
-            type=sha,prefix=
+            type=sha,format=long,prefix=
             type=raw,value=latest
 
       - name: Build and push yral-auth-v2 image
