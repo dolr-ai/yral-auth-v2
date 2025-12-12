@@ -14,7 +14,6 @@ macro_rules! whitelist {
         whitelist!($hm, $($tail)*);
     };
 }
-pub(super) use whitelist;
 
 pub fn default_oauth_clients() -> HashMap<String, OAuthClient> {
     let mut oauth_clients = HashMap::new();

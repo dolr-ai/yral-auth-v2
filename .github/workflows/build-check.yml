@@ -67,7 +67,7 @@ jobs:
           packages: musl-tools # provides musl-gcc
           version: 1.0
 
-      - name: lint check
+      - name: Lint check
         run: |
           cargo fmt --check
           cargo clippy --no-deps --all-features --release -- -Dwarnings

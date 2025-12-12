@@ -1,0 +1,75 @@
+services:
+  fly-redis-proxy:
+    image: ${PROXY_IMAGE:-ghcr.io/dolr-ai/fly-redis-proxy}:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      - FLY_API_TOKEN=${FLY_API_TOKEN}
+    networks:
+      - yral-net
+    healthcheck:
+      test: ["CMD", "nc", "-z", "127.0.0.1", "16379"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+
+  yral-auth:
+    image: ${APP_IMAGE:-ghcr.io/dolr-ai/yral-auth-v2}:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      # Secrets (injected at runtime)
+      COOKIE_KEY: ${COOKIE_KEY}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      JWT_EC_PEM: ${JWT_EC_PEM}
+      CLIENT_JWT_ED_PEM: ${CLIENT_JWT_ED_PEM}
+      APPLE_AUTH_KEY_PEM: ${APPLE_AUTH_KEY_PEM}
+      REDIS_URL: redis://default:${REDIS_PASSWORD}@fly-redis-proxy:16379
+      # Public environment variables (non-sensitive)
+      PORT: "8080"
+      GOOGLE_CLIENT_ID: 804814798298-taifmq3k6olk9bjr1cqb9gfnp1mssqqb.apps.googleusercontent.com
+      APPLE_CLIENT_ID: com.yral.yral-auth
+      APPLE_TEAM_ID: 2UL556KNXC
+      APPLE_KEY_ID: 9DWVYWDYD8
+      JWT_PUB_EC_PEM: |
+        -----BEGIN PUBLIC KEY-----
+        MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEoqN3/0RNfrnrnYGxKBgy/qHnmITr
+        +6ucjxStx7tjA30QJZlWzo0atxmY8y9dUR+eKQI0SnbQds4xLEU8+JGm8Q==
+        -----END PUBLIC KEY-----
+      CLIENT_JWT_PUB_ED_PEM: |
+        -----BEGIN PUBLIC KEY-----
+        MCowBQYDK2VwAyEAKpZNfPOONR9AXiaGmHv8AHemm4SNK0uh+mf523ho5KU=
+        -----END PUBLIC KEY-----
+      SERVER_URL: ${SERVER_URL:-https://auth.yral.com/}
+      # Leptos configuration
+      LEPTOS_OUTPUT_NAME: yral-auth-v2
+      LEPTOS_SITE_ROOT: site
+      LEPTOS_SITE_PKG_DIR: pkg
+      LEPTOS_SITE_ADDR: 0.0.0.0:8080
+      LEPTOS_ENV: PROD
+    networks:
+      - yral-net
+    depends_on:
+      - fly-redis-proxy
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - yral-net
+    depends_on:
+      - yral-auth
+
+networks:
+  yral-net:
+    driver: bridge
+
+volumes:
+  caddy_data:
+  caddy_config:
