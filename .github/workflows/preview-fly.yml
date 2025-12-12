@@ -4,12 +4,12 @@ on:
   pull_request:
     types: [opened, reopened, synchronize, closed]
 
-concurrency:
-  group: preview-${{ github.head_ref }}
-  cancel-in-progress: true
+permissions:
+  deployments: write
 
 env:
   FLY_API_TOKEN: ${{ secrets.YRAL_AUTH_V2_FLY_IO_GITHUB_ACTION }}
+  FLY_ORG: gobazzinga-inc-584
 
 jobs:
   build_check:
@@ -19,12 +19,15 @@ jobs:
       publish-artifact: true
 
   preview:
-    name: Deploy Preview
     if: github.event.action != 'closed'
     needs: build_check
     runs-on: ubuntu-latest
+
+    concurrency:
+      group: pr-${{ github.event.number }}
+
     environment:
-      name: preview
+      name: pr-${{ github.event.number }}
       url: ${{ steps.deploy.outputs.url }}
 
     steps:
@@ -37,50 +40,18 @@ jobs:
 
       - run: chmod +x target/x86_64-unknown-linux-musl/release/yral-auth-v2
 
+      - name: Deploy
+        id: deploy
+        uses: superfly/fly-pr-review-apps@1.2.1
+        env:
+          FLYCTL_VERSION: v0.3.144
+
       - uses: superfly/flyctl-actions/setup-flyctl@master
 
-      - name: Create fly.toml for preview
+      - name: Set secrets and deploy
+        if: github.event.pull_request.merged == false
         run: |
-          cat > fly.toml << 'EOF'
-          app = 'yral-auth-v2-preview-${{ github.event.pull_request.number }}'
-          primary_region = 'sin'
-
-          [build]
-
-          [env]
-            PORT = '8080'
-            GOOGLE_CLIENT_ID = '804814798298-taifmq3k6olk9bjr1cqb9gfnp1mssqqb.apps.googleusercontent.com'
-            JWT_PUB_EC_PEM = """-----BEGIN PUBLIC KEY-----
-          MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEoqN3/0RNfrnrnYGxKBgy/qHnmITr
-          +6ucjxStx7tjA30QJZlWzo0atxmY8y9dUR+eKQI0SnbQds4xLEU8+JGm8Q==
-          -----END PUBLIC KEY-----"""
-            SERVER_URL = "https://yral-auth-v2-preview-${{ github.event.pull_request.number }}.fly.dev/"
-            APPLE_CLIENT_ID = "com.yral.yral-auth"
-            APPLE_TEAM_ID = "2UL556KNXC"
-            APPLE_KEY_ID = "9DWVYWDYD8"
-            CLIENT_JWT_PUB_ED_PEM = """-----BEGIN PUBLIC KEY-----
-          MCowBQYDK2VwAyEAKpZNfPOONR9AXiaGmHv8AHemm4SNK0uh+mf523ho5KU=
-          -----END PUBLIC KEY-----"""
-
-          [http_service]
-            internal_port = 8080
-            force_https = true
-            auto_stop_machines = 'stop'
-            auto_start_machines = true
-            min_machines_running = 0
-
-          [[vm]]
-            memory = '512mb'
-            cpu_kind = 'shared'
-            cpus = 1
-          EOF
-
-      - name: Create Fly app if not exists
-        run: |
-          flyctl apps create yral-auth-v2-preview-${{ github.event.pull_request.number }} --org gobazzinga-inc-584 || true
-
-      - name: Set secrets
-        run: |
+          APP_NAME="pr-${{ github.event.number }}-${{ github.repository_owner }}-yral-auth-v2"
           flyctl secrets set \
             COOKIE_KEY="$COOKIE_KEY" \
             REDIS_URL="$REDIS_URL" \
@@ -88,8 +59,9 @@ jobs:
             JWT_EC_PEM="$JWT_EC_PEM" \
             CLIENT_JWT_ED_PEM="$CLIENT_JWT_ED_PEM" \
             APPLE_AUTH_KEY_PEM="$APPLE_AUTH_KEY_PEM" \
-            --app yral-auth-v2-preview-${{ github.event.pull_request.number }} \
+            --app "$APP_NAME" \
             --stage
+          flyctl deploy --app "$APP_NAME"
         env:
           COOKIE_KEY: ${{ secrets.AUTH_SESSION_COOKIE_SIGNING_SECRET_KEY }}
           REDIS_URL: ${{ secrets.AUTH_FLY_IO_UPSTASH_REDIS_DATABASE_CONNECTION_STRING }}
@@ -97,33 +69,3 @@ jobs:
           JWT_EC_PEM: ${{ secrets.AUTH_JWT_ES256_SIGNING_SECRET_KEY_PEM }}
           CLIENT_JWT_ED_PEM: ${{ secrets.CLIENT_JWT_ED_PEM }}
           APPLE_AUTH_KEY_PEM: ${{ secrets.APPLE_AUTH_KEY_PEM }}
-
-      - name: Deploy to Fly.io
-        id: deploy
-        run: |
-          flyctl deploy --remote-only --app yral-auth-v2-preview-${{ github.event.pull_request.number }}
-          echo "url=https://yral-auth-v2-preview-${{ github.event.pull_request.number }}.fly.dev" >> $GITHUB_OUTPUT
-
-      - name: Comment on PR
-        uses: actions/github-script@v7
-        with:
-          script: |
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: `🚀 Preview deployed to: https://yral-auth-v2-preview-${{ github.event.pull_request.number }}.fly.dev`
-            })
-
-  cleanup:
-    name: Cleanup Preview
-    if: github.event.action == 'closed'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: superfly/flyctl-actions/setup-flyctl@master
-
-      - name: Destroy preview app
-        run: |
-          flyctl apps destroy yral-auth-v2-preview-${{ github.event.pull_request.number }} --yes || true
-        env:
-          FLY_API_TOKEN: ${{ secrets.YRAL_AUTH_V2_FLY_IO_GITHUB_ACTION }}
