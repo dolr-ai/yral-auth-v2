@@ -1,5 +1,4 @@
 use std::sync::Arc;
-
 use axum::{
     response::{IntoResponse, Response},
     Extension, Form, Json,
@@ -9,25 +8,18 @@ use ic_agent::{
     identity::{Delegation, Secp256k1Identity, SignedDelegation},
     Identity,
 };
-use leptos::prelude::*;
+use leptos::{prelude::*};
 use sha2::{Digest, Sha256};
 use url::Url;
 use web_time::Duration;
 use yral_types::delegated_identity::DelegatedIdentityWire;
 
 use crate::{
-    context::server::ServerCtx,
-    kv::KVStore,
-    oauth::{
-        client_validation::{ClientIdValidator, OAuthClientType, ValidationRes},
-        jwt::{
-            generate::{generate_access_token_and_id_token_jwt, generate_refresh_token_jwt},
-            AuthCodeClaims, RefreshTokenClaims,
-        },
-        AuthGrantQuery, PartialOIDCConfig, TokenGrantError, TokenGrantErrorKind, TokenGrantRes,
-        TokenGrantResult,
-    },
-    utils::{identity::generate_random_identity_and_save, time::current_epoch},
+    context::server::ServerCtx, kv::KVStore, oauth::{
+        AuthGrantQuery,  PartialOIDCConfig,  TokenGrantError, TokenGrantErrorKind, TokenGrantRes, TokenGrantResult, client_validation::{ClientIdValidator, OAuthClientType, ValidationRes}, jwt::{
+            AuthCodeClaims, RefreshTokenClaims, generate::{generate_access_token_and_id_token_jwt,  generate_refresh_token_jwt}
+        }
+    },  utils::{identity::generate_random_identity_and_save, time::current_epoch}
 };
 
 async fn verify_client_secret(
@@ -435,3 +427,4 @@ async fn handle_client_credentials_grant(
 
     Ok(grant)
 }
+

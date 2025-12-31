@@ -1,24 +1,46 @@
 use std::{collections::HashMap, env, sync::Arc};
 
-use axum::{extract::FromRef, http::header::ACCEPT};
+use axum::extract::FromRef;
+#[cfg(feature = "apple-oauth")]
+use axum::http::header::ACCEPT;
 use base64::{prelude::BASE64_URL_SAFE_NO_PAD, Engine};
 use jsonwebtoken::jwk::{self, Jwk};
 use leptos::{config::LeptosOptions, prelude::expect_context};
 use leptos_axum::AxumRouteListing;
-use openidconnect::{
-    core::{CoreClient, CoreJsonWebKeySet, CoreProviderMetadata},
-    reqwest, ClientId, ClientSecret, IssuerUrl, RedirectUrl,
-};
+use openidconnect::{core::CoreClient, reqwest, ClientId, IssuerUrl, RedirectUrl};
+
+#[cfg(any(feature = "google-oauth", feature = "apple-oauth"))]
+use openidconnect::core::CoreProviderMetadata;
+
+#[cfg(feature = "google-oauth")]
+use openidconnect::core::CoreJsonWebKeySet;
+
+#[cfg(feature = "google-oauth")]
+use openidconnect::ClientSecret;
 use p256::pkcs8::DecodePublicKey;
 
+#[cfg(feature = "phone-auth")]
+use crate::context::message_delivery_service::MessageDeliveryService;
 use crate::{
-    consts::{APPLE_ISSUER_URL, AUTH_TOKEN_KID, GOOGLE_ISSUER_URL},
+    consts::AUTH_TOKEN_KID,
     kv::KVStoreImpl,
     oauth::{
         client_validation::ClientIdValidatorImpl, jwt::JsonWebKeySet, SupportedOAuthProviders,
     },
-    oauth_provider::{AppleOAuthProvider, GoogleOAuthProvider, OAuthProviderImpl, StdOAuthClient},
+    oauth_provider::{OAuthProviderImpl, StdOAuthClient},
 };
+
+#[cfg(feature = "google-oauth")]
+use crate::consts::GOOGLE_ISSUER_URL;
+
+#[cfg(feature = "apple-oauth")]
+use crate::consts::APPLE_ISSUER_URL;
+
+#[cfg(feature = "google-oauth")]
+use crate::oauth_provider::GoogleOAuthProvider;
+
+#[cfg(feature = "apple-oauth")]
+use crate::oauth_provider::AppleOAuthProvider;
 
 #[derive(FromRef, Clone)]
 pub struct ServerState {
@@ -118,10 +140,13 @@ pub struct ServerCtx {
     pub jwk_pairs: JwkPairs,
     pub kv_store: KVStoreImpl,
     pub validator: ClientIdValidatorImpl,
+    #[cfg(feature = "phone-auth")]
+    pub message_delivery_service: Box<dyn MessageDeliveryService>,
 }
 
 impl ServerCtx {
     #[allow(dead_code)]
+    #[cfg(any(feature = "google-oauth", feature = "apple-oauth"))]
     async fn init_oauth_client(
         client_id_env: &str,
         issuer_url: IssuerUrl,
@@ -148,6 +173,7 @@ impl ServerCtx {
     /// This creates a GoogleOAuthProvider that handles JWK rotation automatically.
     /// Google rotates their JWT signing keys regularly, and this provider respects
     /// the Cache-Control headers from Google's JWK endpoint to refresh keys appropriately.
+    #[cfg(feature = "google-oauth")]
     async fn init_google_oauth_client(
         http_client: &reqwest::Client,
         redirect_uri: &RedirectUrl,
@@ -189,6 +215,7 @@ impl ServerCtx {
         Ok(())
     }
 
+    #[cfg(feature = "apple-oauth")]
     async fn init_apple_oauth_client(
         http_client: &reqwest::Client,
         redirect_uri: &RedirectUrl,
@@ -244,6 +271,7 @@ impl ServerCtx {
         let redirect_uri = RedirectUrl::new(redirect_uri).expect("Invalid `SERVER_URL`");
 
         // Google OAuth
+        #[cfg(feature = "google-oauth")]
         if let Err(e) =
             Self::init_google_oauth_client(http_client, &redirect_uri, &mut oauth_providers).await
         {
@@ -251,6 +279,7 @@ impl ServerCtx {
         }
 
         // Apple OAuth
+        #[cfg(feature = "apple-oauth")]
         if let Err(e) =
             Self::init_apple_oauth_client(http_client, &redirect_uri, &mut oauth_providers).await
         {
@@ -292,7 +321,7 @@ impl ServerCtx {
             .build()
             .expect("Client should build");
 
-        let server_url = env::var("SERVER_URL").expect("`SERVER_URL` is required");
+        let server_url = env::var("SERVER_URL").unwrap_or("http://localhost:3000".to_owned());
         let server_url = server_url
             .strip_suffix("/")
             .unwrap_or(&server_url)
@@ -304,18 +333,48 @@ impl ServerCtx {
 
         let kv_store = Self::init_kv_store().await;
 
-        Self {
-            oauth_http_client,
-            oauth_providers,
-            server_url,
-            cookie_key,
-            jwk_pairs: JwkPairs::default(),
-            kv_store,
-            validator: ClientIdValidatorImpl::Const(Default::default()),
+        #[cfg(feature = "phone-auth")] {
+            use crate::context::message_delivery_service;
+
+            let message_delivery_service = {
+                let whatsapp_api_key = env::var("WHATSAPP_API_KEY")
+                    .expect("`WHATSAPP_API_KEY` is required for phone auth!");
+                Box::new(
+                    message_delivery_service::WhatsAppMessageDeliveryService::new(
+                        whatsapp_api_key,
+                    ),
+                ) as Box<dyn MessageDeliveryService>
+            };
+
+            Self {
+                oauth_http_client,
+                oauth_providers,
+                server_url,
+                cookie_key,
+                jwk_pairs: JwkPairs::default(),
+                kv_store,
+                validator: ClientIdValidatorImpl::Const(Default::default()),
+                message_delivery_service,
+            }
         }
+        #[cfg(not(feature = "phone-auth"))]
+        {
+
+            Self {
+                oauth_http_client,
+                oauth_providers,
+                server_url,
+                cookie_key,
+                jwk_pairs: JwkPairs::default(),
+                kv_store,
+                validator: ClientIdValidatorImpl::Const(Default::default()),
+            }
+        }
+
     }
 
     /// Start background JWK refresh task for OAuth providers that support it
+    #[cfg(feature = "google-oauth")]
     pub fn start_jwk_refresh_task(self: &Arc<Self>) {
         // For now, we'll check Google OAuth provider and start a task that
         // calls the refresh method periodically

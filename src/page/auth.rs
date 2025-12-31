@@ -1,6 +1,5 @@
 use base64::{prelude::BASE64_URL_SAFE, Engine};
 use leptos::{either::Either, prelude::*};
-use leptos_icons::Icon;
 use leptos_router::{
     components::Redirect,
     hooks::{use_navigate, use_query},
@@ -11,17 +10,17 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 
 use crate::{
-    components::{
-        apple_symbol::AppleSymbol, google_symbol::GoogleSymbol, spinner::Spinner,
-        yral_symbol::YralSymbol,
-    },
+    components::{spinner::Spinner, whatsapp_symbol::WhatsAppSymbol, yral_symbol::YralSymbol},
     error::AuthErrorKind,
     oauth::{
-        client_validation::{ClientIdValidator, ClientIdValidatorImpl},
-        AuthCodeError, AuthLoginHint, AuthQuery, AuthResponseCode, CodeChallenge,
-        CodeChallengeMethodS256, SupportedOAuthProviders,
+        AuthCodeError, AuthLoginHint, AuthQuery, AuthResponseCode, CodeChallenge, CodeChallengeMethodS256, SupportedOAuthProviders, client_validation::{ClientIdValidator, ClientIdValidatorImpl}
     },
 };
+
+use crate::components::google_symbol::GoogleSymbol;
+
+#[cfg(feature = "apple-oauth")]
+use crate::components::apple_symbol::AppleSymbol;
 
 #[derive(Debug, Clone, Params, PartialEq)]
 pub struct RedirectUriQuery {
@@ -163,17 +162,9 @@ pub fn AuthPage() -> impl IntoView {
                 {move || Suspend::new(async move {
                     let auth = auth_query.await;
                     match auth {
-                        Ok(AuthKind::Default(auth)) => Either::Left(view! {
-                            <LoginContent auth/>
-                        }),
-                        Ok(AuthKind::Redirect(path)) => Either::Right(view! {
-                            <Redirect path />
-                        }),
-                        Err(e) => {
-                            Either::Right(view! {
-                                <Redirect path=e.to_redirect() />
-                            })
-                        }
+                        Ok(AuthKind::Default(auth)) => Either::Left(view! { <LoginContent auth /> }),
+                        Ok(AuthKind::Redirect(path)) => Either::Right(view! { <Redirect path /> }),
+                        Err(e) => Either::Right(view! { <Redirect path=e.to_redirect() /> }),
                     }
                 })}
             </Suspense>
@@ -187,25 +178,60 @@ pub fn LoginContent(auth: Box<AuthQuery>) -> impl IntoView {
 
     view! {
         <div class="flex flex-col items-center text-white cursor-auto">
-            <Icon attr:class="rounded-full mb-6 text-8xl" icon=YralSymbol />
+            <YralSymbol class="rounded-full mb-6 text-8xl" />
             <span class="text-2xl mb-4">Login to Yral</span>
             <div class="flex flex-col w-full gap-4 items-center">
-                <LoginButton auth=auth_store attr:class="flex flex-row justify-center cursor-pointer items-center justify-between gap-1 rounded-full bg-white pr-4 hover:bg-neutral-200" provider=SupportedOAuthProviders::Google>
-                    <div class="grid grid-cols-1 place-items-center pl-2 py-2 rounded-full">
-                        <Icon attr:class="text-xl rounded-full" icon=GoogleSymbol />
-                    </div>
-                    <span class="text-neutral-900">{"Continue with Google"}</span>
-                </LoginButton>
-                <LoginButton auth=auth_store attr:class="flex flex-row justify-center cursor-pointer items-center pr-4 bg-white rounded-full border border-gray-300 hover:bg-neutral-200" provider=SupportedOAuthProviders::Apple>
-                    <div class="grid grid-cols-1 place-items-center">
-                        <Icon attr:class="text-4xl" icon=AppleSymbol />
-                    </div>
-                    <span class="text-black">{"Continue with Apple"}</span>
-                </LoginButton>
+
+                {#[cfg(feature = "phone-auth")]
+                {
+                    view! {
+                        <LoginButton
+                            auth=auth_store
+                            attr:class="flex flex-row justify-center cursor-pointer items-center justify-between gap-1 rounded-full bg-white pr-4 hover:bg-neutral-200"
+                            provider=SupportedOAuthProviders::Phone
+                        >
+                            <div class="grid grid-cols-1 place-items-center pl-2 py-2 rounded-full">
+                                <WhatsAppSymbol class="text-xl rounded-full" />
+                            </div>
+                            <span class="text-neutral-900">{"Continue with Whatsapp"}</span>
+                        </LoginButton>
+                    }
+                }} {#[cfg(feature = "google-oauth")]
+                {
+                    view! {
+                        <LoginButton
+                            auth=auth_store
+                            attr:class="flex flex-row justify-center cursor-pointer items-center justify-between gap-1 rounded-full bg-white pr-4 hover:bg-neutral-200"
+                            provider=SupportedOAuthProviders::Google
+                        >
+                            <div class="grid grid-cols-1 place-items-center pl-2 py-2 rounded-full">
+                                <GoogleSymbol class="text-xl rounded-full" />
+                            </div>
+                            <span class="text-neutral-900">{"Continue with Google"}</span>
+                        </LoginButton>
+                    }
+                }} {#[cfg(feature = "apple-oauth")]
+                {
+                    view! {
+                        <LoginButton
+                            auth=auth_store
+                            attr:class="flex flex-row justify-center cursor-pointer items-center pr-4 bg-white rounded-full border border-gray-300 hover:bg-neutral-200"
+                            provider=SupportedOAuthProviders::Apple
+                        >
+                            <div class="grid grid-cols-1 place-items-center">
+                                <AppleSymbol class="text-4xl" />
+                            </div>
+                            <span class="text-black">{"Continue with Apple"}</span>
+                        </LoginButton>
+                    }
+                }}
             </div>
         </div>
     }
 }
+
+
+
 
 #[component]
 pub fn LoginButton(
@@ -222,9 +248,5 @@ pub fn LoginButton(
         (nav)(&redirect_path, NavigateOptions::default());
     };
 
-    view! {
-        <button on:click=move |_| redirect_to_oauth()>
-            {children()}
-        </button>
-    }
+    view! { <button on:click=move |_| redirect_to_oauth()>{children()}</button> }
 }

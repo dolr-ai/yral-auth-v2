@@ -20,15 +20,24 @@ pub mod client_validation;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Hash, Serialize, Deserialize)]
 pub enum SupportedOAuthProviders {
+    #[cfg(feature = "google-oauth")]
     Google,
+    #[cfg(feature = "apple-oauth")]
     Apple,
+    #[cfg(feature = "phone-auth")]
+    Phone,
 }
 
 impl Display for SupportedOAuthProviders {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            #[cfg(feature = "google-oauth")]
             Self::Google => write!(f, "google"),
+            #[cfg(feature = "apple-oauth")]
             Self::Apple => write!(f, "apple"),
+            #[cfg(feature = "phone-auth")]
+            Self::Phone => write!(f, "phone"),
+            _ => unreachable!("No OAuth providers enabled"),
         }
     }
 }
@@ -38,8 +47,12 @@ impl FromStr for SupportedOAuthProviders {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
+            #[cfg(feature = "google-oauth")]
             "google" => Ok(Self::Google),
+            #[cfg(feature = "apple-oauth")]
             "apple" => Ok(Self::Apple),
+            #[cfg(feature = "phone-auth")]
+            "phone" => Ok(Self::Phone),
             _ => Err(AuthErrorKind::InvalidProvider(s.to_string())),
         }
     }
@@ -106,12 +119,6 @@ impl FromStr for AuthLoginHint {
 
         Ok(res)
     }
-}
-
-pub fn login_hint_message() -> yral_identity::msg_builder::Message {
-    use yral_identity::msg_builder::Message;
-
-    Message::default().method_name("yral_auth_v2_login_hint".into())
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
