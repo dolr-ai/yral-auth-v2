@@ -94,7 +94,7 @@ pub fn VerifyPhoneAuth() -> impl IntoView {
     // Watch for action completion and update error message
     Effect::new(move |_| {
         if let Some(Err(e)) = verify_action.value().get() {
-                set_error_message.set(Some(e));
+            set_error_message.set(Some(e));
         }
     });
 

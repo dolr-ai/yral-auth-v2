@@ -27,7 +27,6 @@ struct OneTimePassCodeClaim {
     pub exp: u64,
 }
 
-
 pub async fn generate_otp_and_set_cookie(
     server_context: &ServerCtx,
     phone_number: String,
@@ -116,7 +115,7 @@ pub async fn verify_phone_one_time_passcode(
         .map_err(|e| AuthErrorKind::Unexpected(e.to_string()))?;
     let otp_cookie = private_cookie_jar
         .get("otp_token")
-        .ok_or( AuthErrorKind::OtpCookieNotFound)?;
+        .ok_or(AuthErrorKind::OtpCookieNotFound)?;
     let auth_client_query_raw = private_cookie_jar
         .get("auth_client_query")
         .ok_or(AuthErrorKind::AuthClientCookieNotFound)?
