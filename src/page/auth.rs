@@ -13,7 +13,7 @@ use crate::{
     components::{spinner::Spinner, whatsapp_symbol::WhatsAppSymbol, yral_symbol::YralSymbol},
     error::AuthErrorKind,
     oauth::{
-        AuthCodeError, AuthLoginHint, AuthQuery, AuthResponseCode, CodeChallenge, CodeChallengeMethodS256, SupportedOAuthProviders, client_validation::{ClientIdValidator, ClientIdValidatorImpl}
+        AuthCodeError, AuthLoginHint, AuthQuery, AuthResponse as AuthResponseCode, CodeChallenge, CodeChallengeMethod, SupportedOAuthProviders, client_validation::{ClientIdValidator, ClientIdValidatorImpl}
     },
 };
 
@@ -37,7 +37,7 @@ pub struct AuthQueryMaybe {
     response_type: Option<AuthResponseCode>,
     client_id: Option<String>,
     code_challenge: Option<CodeChallenge>,
-    code_challenge_method: Option<CodeChallengeMethodS256>,
+    code_challenge_method: Option<CodeChallengeMethod>,
     nonce: Option<String>,
     login_hint: Option<AuthLoginHint>,
     provider: Option<SupportedOAuthProviders>,

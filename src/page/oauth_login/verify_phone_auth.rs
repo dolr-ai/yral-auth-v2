@@ -1,12 +1,15 @@
 use std::sync::Arc;
 
+use leptos::html::nav;
 use leptos::logging::log;
 use leptos::prelude::*;
 use leptos_router::hooks::use_query;
 use leptos_router::params::Params;
 use serde::{Deserialize, Serialize};
+use url::Url;
 
-use crate::{components::otp_input::OtpInput};
+use crate::error::AuthError;
+use crate::components::otp_input::OtpInput;
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Serialize, Params)]
 struct VerifyQuery {
@@ -18,23 +21,21 @@ struct VerifyQuery {
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct VerifyPhoneOtpRequest {
-    pub code: String,
-    pub phone_number: String,
-    pub client_state: String
+    pub code: String, //otp code
+    pub phone_number: String, // phone number
+    pub client_state: String // client state (csrf token)
 }
 
 #[server]
-pub async fn verify_phone_auth(verify_request: VerifyPhoneOtpRequest) -> Result<(), ServerFnError>{
+pub async fn verify_phone_auth(verify_request: VerifyPhoneOtpRequest) -> Result<(String, Url), AuthError> {
     use crate::context::server::ServerCtx;
     use crate::api::phone_auth::verify_phone_one_time_passcode;
 
     let server_ctx = expect_context::<Arc<ServerCtx>>();
 
-    let token = verify_phone_one_time_passcode(&server_ctx, verify_request).await?;
+    let (token, redirect_uri) = verify_phone_one_time_passcode(&server_ctx, verify_request).await?;
 
-    println!("Generated Token: {}", token);
-
-    Ok(())
+    Ok((token, redirect_uri))
 
 }
 
@@ -68,15 +69,18 @@ pub fn VerifyPhoneAuth() -> impl IntoView {
                     client_state,
                 };
                 
+                let navigate = leptos_router::hooks::use_navigate();
                 match verify_phone_auth(verify_request).await {
-                    Ok(_) => {
-                        log!("OTP verification successful");
-                        // TODO: Redirect to success page or complete OAuth flow
+                    Ok(token) => {
+
+                        let (_token, redirect_uri) = token;
+                        // Only call use_navigate on the client, not during SSR
+                        navigate(&redirect_uri.to_string(), Default::default());
                         Ok(())
                     }
                     Err(e) => {
-                        log!("OTP verification failed: {}", e);
-                        Err(format!("Verification failed: {}", e))
+                        set_error_message.set(Some(format!("Verification failed: {}", e)));
+                        Ok(())
                     }
                 }
             } else {

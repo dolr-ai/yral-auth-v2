@@ -9,11 +9,14 @@ use crate::{
     context::provide_client_id_validator,
     page::{
         auth::AuthPage,
-        oauth_login::{
-            oauth_callback::OAuthCallbackPage, oauth_redirector::OAuthRedirectorPage,
-            phone_auth_login::PhoneAuthLogin, verify_phone_auth::VerifyPhoneAuth,
-        },
+        error_page::ErrorPage,
+        oauth_login::{oauth_callback::OAuthCallbackPage, oauth_redirector::OAuthRedirectorPage},
     },
+};
+
+#[cfg(feature = "phone-auth")]
+use crate::page::oauth_login::{
+    phone_auth_login::PhoneAuthLogin, verify_phone_auth::VerifyPhoneAuth,
 };
 
 pub fn shell(options: LeptosOptions) -> impl IntoView {
@@ -54,8 +57,33 @@ pub fn App() -> impl IntoView {
                     <Route path=path!("/oauth/auth") view=AuthPage />
                     <Route path=path!("/oauth_redirector") view=OAuthRedirectorPage />
                     <Route path=path!("/oauth_callback") view=OAuthCallbackPage />
-                    <Route path=path!("/phone/verify") view=VerifyPhoneAuth />
-                    <Route path=path!("/phone/auth") view=PhoneAuthLogin />
+                    <Route
+                        path=path!("/phone/verify")
+                        view=|| {
+                            #[cfg(feature = "phone-auth")]
+                            {
+                                view! { <VerifyPhoneAuth /> }
+                            }
+                            #[cfg(not(feature = "phone-auth"))]
+                            {
+                                view! { <ErrorPage /> }
+                            }
+                        }
+                    />
+                    <Route
+                        path=path!("/phone/auth")
+                        view=|| {
+                            #[cfg(feature = "phone-auth")]
+                            {
+                                view! { <PhoneAuthLogin /> }
+                            }
+                            #[cfg(not(feature = "phone-auth"))]
+                            {
+                                view! { <ErrorPage /> }
+                            }
+                        }
+                    />
+                    <Route path=path!("/error") view=ErrorPage />
                 </Routes>
             </main>
         </Router>
