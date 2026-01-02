@@ -17,12 +17,12 @@ use openidconnect::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    api::identity_provider::login_hint_message,
     context::server::expect_server_ctx,
     error::AuthErrorKind,
     kv::{KVStore, KVStoreImpl},
     oauth::{
-        jwt::generate::generate_code_grant_jwt, login_hint_message, AuthLoginHint, AuthQuery,
-        SupportedOAuthProviders,
+        jwt::generate::generate_code_grant_jwt, AuthLoginHint, AuthQuery, SupportedOAuthProviders,
     },
     oauth_provider::OAuthProvider,
     utils::identity::generate_random_identity_and_save,
@@ -80,13 +80,21 @@ pub async fn get_oauth_url_impl(
             Nonce::new_random,
         )
         .set_pkce_challenge(pkce_challenge);
-    let (auth_url, oauth_csrf_token, _) = if provider == SupportedOAuthProviders::Google {
-        authorize_builder
-            .add_scope(Scope::new("email".to_string()))
-            .url()
-    } else {
-        authorize_builder.url()
+
+    #[cfg(feature = "google-oauth")]
+    let authorize_builder = {
+        use SupportedOAuthProviders::Google;
+        if provider == Google {
+            authorize_builder.add_scope(Scope::new("email".to_string()))
+        } else {
+            authorize_builder
+        }
     };
+
+    #[cfg(not(feature = "google-oauth"))]
+    let authorize_builder = authorize_builder;
+
+    let (auth_url, oauth_csrf_token, _) = authorize_builder.url();
 
     let mut jar: PrivateCookieJar = extract_with_state(&ctx.cookie_key).await?;
 

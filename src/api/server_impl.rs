@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use axum::{
     response::{IntoResponse, Response},
     Extension, Form, Json,
@@ -9,8 +7,8 @@ use ic_agent::{
     identity::{Delegation, Secp256k1Identity, SignedDelegation},
     Identity,
 };
-use leptos::prelude::*;
 use sha2::{Digest, Sha256};
+use std::sync::Arc;
 use url::Url;
 use web_time::Duration;
 use yral_types::delegated_identity::DelegatedIdentityWire;

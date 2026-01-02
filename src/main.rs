@@ -98,8 +98,8 @@ async fn main() {
     let ctx = Arc::new(ServerCtx::new().await);
 
     // Start background JWK refresh task for Google OAuth
+    #[cfg(feature = "google-oauth")]
     ctx.start_jwk_refresh_task();
-    println!("Started JWK refresh background task");
 
     let app_state = ServerState {
         leptos_options,
@@ -113,7 +113,7 @@ async fn main() {
 
     let app = Router::new()
         .route(
-            "/api/*fn_name",
+            "/api/{*fn_name}",
             get(server_fn_handler).post(server_fn_handler),
         )
         .leptos_routes_with_handler(routes, get(leptos_routes_handler))

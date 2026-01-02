@@ -1,21 +1,32 @@
+use std::sync::Arc;
+
+#[cfg(any(feature = "google-oauth", feature = "apple-oauth"))]
 use std::{
     sync::{
         atomic::{AtomicU64, Ordering},
-        Arc, RwLock,
+        RwLock,
     },
     time::Duration,
 };
 
 use enum_dispatch::enum_dispatch;
-use openidconnect::{
-    core::{CoreIdToken, CoreIdTokenClaims},
-    reqwest, ClientSecret, Nonce,
-};
+use openidconnect::Nonce;
+
+#[cfg(feature = "google-oauth")]
+use openidconnect::reqwest;
+
+#[cfg(any(feature = "apple-oauth", feature = "google-oauth"))]
+use openidconnect::ClientSecret;
+#[cfg(feature = "apple-oauth")]
 use serde::{Deserialize, Serialize};
 
+use openidconnect::core::{CoreIdToken, CoreIdTokenClaims};
+
+use crate::error::AuthErrorKind;
+
+#[cfg(feature = "apple-oauth")]
 use crate::{
     consts::{APPLE_ISSUER_URL, APPLE_ISSUER_URL2},
-    error::AuthErrorKind,
     utils::time::current_epoch,
 };
 
@@ -91,6 +102,7 @@ impl OAuthProvider for IdentityOAuthProvider {
 }
 
 // Google OAuth provider with JWK rotation support
+#[cfg(feature = "google-oauth")]
 pub struct GoogleOAuthProvider {
     /// Base OAuth client - will be refreshed periodically with new JWKs
     client_cache: RwLock<Arc<StdOAuthClient>>,
@@ -105,6 +117,7 @@ pub struct GoogleOAuthProvider {
     redirect_uri: Option<openidconnect::RedirectUrl>,
 }
 
+#[cfg(feature = "google-oauth")]
 impl GoogleOAuthProvider {
     pub async fn new(
         base_client: StdOAuthClient,
@@ -216,6 +229,7 @@ impl GoogleOAuthProvider {
     }
 }
 
+#[cfg(feature = "google-oauth")]
 impl OAuthProvider for GoogleOAuthProvider {
     fn get_client(&self) -> Arc<StdOAuthClient> {
         // For Google, we need to check if JWKs are fresh
@@ -256,6 +270,7 @@ impl OAuthProvider for GoogleOAuthProvider {
 // client secrets for apple login are only valid for 6 months
 // the implementation automatically refreshes the client secret
 // when it expires
+#[cfg(feature = "apple-oauth")]
 pub struct AppleOAuthProvider {
     keygen: AppleClientSecretGen,
     // extremely unholy
@@ -263,6 +278,7 @@ pub struct AppleOAuthProvider {
     cache_expiry_epoch_secs: AtomicU64,
 }
 
+#[cfg(feature = "apple-oauth")]
 #[derive(Serialize, Deserialize)]
 struct AppleSecretClaims {
     iss: String,
@@ -272,6 +288,7 @@ struct AppleSecretClaims {
     sub: String,
 }
 
+#[cfg(feature = "apple-oauth")]
 struct AppleClientSecretGen {
     auth_key: jsonwebtoken::EncodingKey,
     key_id: String,
@@ -279,6 +296,7 @@ struct AppleClientSecretGen {
     client_id: String,
 }
 
+#[cfg(feature = "apple-oauth")]
 impl AppleClientSecretGen {
     fn new(
         auth_key: jsonwebtoken::EncodingKey,
@@ -320,6 +338,7 @@ impl AppleClientSecretGen {
     }
 }
 
+#[cfg(feature = "apple-oauth")]
 impl AppleOAuthProvider {
     pub fn new(
         base_client: StdOAuthClient,
@@ -346,6 +365,7 @@ impl AppleOAuthProvider {
     }
 }
 
+#[cfg(feature = "apple-oauth")]
 impl OAuthProvider for AppleOAuthProvider {
     fn get_client(&self) -> Arc<StdOAuthClient> {
         let cur_epoch = current_epoch().as_secs();
@@ -393,6 +413,10 @@ impl OAuthProvider for AppleOAuthProvider {
 #[allow(clippy::large_enum_variant)]
 #[enum_dispatch(OAuthProvider)]
 pub enum OAuthProviderImpl {
+    #[cfg(feature = "google-oauth")]
     GoogleOAuthProvider,
+    #[cfg(feature = "apple-oauth")]
     AppleOAuthProvider,
+    #[cfg(not(any(feature = "google-oauth", feature = "apple-oauth")))]
+    IdentityOAuthProvider,
 }

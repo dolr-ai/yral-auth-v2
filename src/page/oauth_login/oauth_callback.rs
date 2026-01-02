@@ -11,7 +11,7 @@ pub struct OAuthQuery {
 
 #[server]
 pub async fn perform_oauth_login(code: String, state: String) -> Result<String, ServerFnError> {
-    use super::server_impl::perform_oauth_login_impl;
+    use crate::api::oauth_server_impl::perform_oauth_login_impl;
     perform_oauth_login_impl(code, state).await
 }
 
@@ -69,12 +69,16 @@ pub fn OAuthCallbackPage() -> impl IntoView {
     );
 
     view! {
-        <Suspense fallback=move || view! { <div class="w-dvw h-dvh flex items-center justify-center bg-black"><Spinner/></div> }>
+        <Suspense fallback=move || {
+            view! {
+                <div class="w-dvw h-dvh flex items-center justify-center bg-black">
+                    <Spinner />
+                </div>
+            }
+        }>
             {move || Suspend::new(async move {
                 let redirect_res = res.await.unwrap_or_else(|e| e.to_redirect());
-                view! {
-                    <UrlOrIntentRedirect url=redirect_res/>
-                }
+                view! { <UrlOrIntentRedirect url=redirect_res /> }
             })}
         </Suspense>
     }
