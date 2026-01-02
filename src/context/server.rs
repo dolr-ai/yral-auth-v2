@@ -333,16 +333,15 @@ impl ServerCtx {
 
         let kv_store = Self::init_kv_store().await;
 
-        #[cfg(feature = "phone-auth")] {
+        #[cfg(feature = "phone-auth")]
+        {
             use crate::context::message_delivery_service;
 
             let message_delivery_service = {
                 let whatsapp_api_key = env::var("WHATSAPP_API_KEY")
                     .expect("`WHATSAPP_API_KEY` is required for phone auth!");
                 Box::new(
-                    message_delivery_service::WhatsAppMessageDeliveryService::new(
-                        whatsapp_api_key,
-                    ),
+                    message_delivery_service::WhatsAppMessageDeliveryService::new(whatsapp_api_key),
                 ) as Box<dyn MessageDeliveryService>
             };
 
@@ -359,7 +358,6 @@ impl ServerCtx {
         }
         #[cfg(not(feature = "phone-auth"))]
         {
-
             Self {
                 oauth_http_client,
                 oauth_providers,
@@ -370,7 +368,6 @@ impl ServerCtx {
                 validator: ClientIdValidatorImpl::Const(Default::default()),
             }
         }
-
     }
 
     /// Start background JWK refresh task for OAuth providers that support it

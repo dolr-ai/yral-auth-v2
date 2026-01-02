@@ -11,7 +11,7 @@ pub async fn get_oauth_url(
     get_oauth_url_impl(provider, client_state).await
 }
 
-#[derive(Debug, Clone, Params, PartialEq,)]
+#[derive(Debug, Clone, Params, PartialEq)]
 pub struct OAuthRedirectorQueryMaybe {
     provider: Option<SupportedOAuthProviders>,
     state: Option<String>,

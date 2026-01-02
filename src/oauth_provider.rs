@@ -15,7 +15,7 @@ use openidconnect::Nonce;
 #[cfg(feature = "google-oauth")]
 use openidconnect::reqwest;
 
-#[cfg(any(feature = "apple-oauth", feature  = "google-oauth"))]
+#[cfg(any(feature = "apple-oauth", feature = "google-oauth"))]
 use openidconnect::ClientSecret;
 #[cfg(feature = "apple-oauth")]
 use serde::{Deserialize, Serialize};

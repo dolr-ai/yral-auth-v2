@@ -37,7 +37,6 @@ impl Display for SupportedOAuthProviders {
             Self::Apple => write!(f, "apple"),
             #[cfg(feature = "phone-auth")]
             Self::Phone => write!(f, "phone"),
-            _ => unreachable!("No OAuth providers enabled"),
         }
     }
 }

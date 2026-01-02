@@ -26,7 +26,7 @@ pub fn ErrorPage() -> impl IntoView {
             <img src="/images/error-logo.svg" />
             <h1 class="p-2 text-2xl font-bold text-white md:text-3xl">"oh no!"</h1>
             <div class="px-8 mb-4 w-full text-xs text-center resize-none md:w-2/3 md:text-sm lg:w-1/3 text-white/60">
-                {error_string.clone()}
+                {error_string}
             </div>
         </div>
     }

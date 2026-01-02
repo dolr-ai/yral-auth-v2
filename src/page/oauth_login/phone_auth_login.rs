@@ -1,28 +1,27 @@
 use std::sync::Arc;
 
-use leptos::server;
 use leptos::prelude::*;
+use leptos::server;
 use leptos::server_fn::codec::Json;
-use leptos_router::NavigateOptions;
 use leptos_router::components::Redirect;
 use leptos_router::hooks::{use_navigate, use_query};
 use leptos_router::params::Params;
+use leptos_router::NavigateOptions;
 use serde::{Deserialize, Serialize};
 
 use crate::components::spinner::Spinner;
 use crate::error::AuthError;
 use crate::error::AuthErrorKind;
-use crate::oauth::AuthQuery;
 use crate::oauth::client_validation::ClientIdValidator;
+use crate::oauth::AuthQuery;
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Serialize, Params)]
 struct AuthClientQuery {
     auth_client_state: Option<String>,
 }
 
-
 #[cfg(feature = "ssr")]
-async  fn handle_phone_auth_impl(
+async fn handle_phone_auth_impl(
     auth_client_query: AuthQuery,
     phone_number: String,
 ) -> Result<(), AuthErrorKind> {
@@ -39,16 +38,13 @@ async  fn handle_phone_auth_impl(
         .await?;
 
     generate_otp_and_set_cookie(&server_ctx, phone_number, auth_client_query).await
-
 }
-
 
 #[server(endpoint = "/phone_auth_login", input = Json, output = Json)]
 async fn handle_phone_auth(
     auth_client_query: AuthQuery,
     phone_number: String,
 ) -> Result<(), AuthError> {
-
     let result = handle_phone_auth_impl(auth_client_query, phone_number).await;
     let response_options = expect_context::<leptos_axum::ResponseOptions>();
 
@@ -61,15 +57,11 @@ async fn handle_phone_auth(
             Err(e.into())
         }
     }
-    
 }
-
 
 #[component]
 pub fn PhoneAuthLogin() -> impl IntoView {
-
     let auth_client_query = use_query::<AuthClientQuery>();
-
 
     let nav = use_navigate();
     let submit_action = Action::new({
@@ -80,43 +72,50 @@ pub fn PhoneAuthLogin() -> impl IntoView {
             let nav = nav.clone();
             async move {
                 let client_state = auth_client_query.state.clone();
-                handle_phone_auth(auth_client_query, phone_number.clone()).await.map_err(|e|e.to_string())?;
-                let redirect_path = format!("/phone/verify?phone={}&auth_client_state={}",
-                    phone_number,
-                    client_state
+                handle_phone_auth(auth_client_query, phone_number.clone())
+                    .await
+                    .map_err(|e| e.to_string())?;
+                let redirect_path = format!(
+                    "/phone/verify?phone={}&auth_client_state={}",
+                    phone_number, client_state
                 );
                 leptos::logging::log!("Navigating to {}", redirect_path);
-                nav(&redirect_path, NavigateOptions { replace: true, ..Default::default() });
+                nav(
+                    &redirect_path,
+                    NavigateOptions {
+                        replace: true,
+                        ..Default::default()
+                    },
+                );
                 leptos::logging::log!("Navigation completed");
                 Ok::<_, String>(())
             }
         }
     });
 
-
     let client_auth_query = Resource::new_blocking(
         move || auth_client_query.get(),
         async move |query| {
-            let query = query.map_err(|e|e.to_string())?;
+            let query = query.map_err(|e| e.to_string())?;
             let Some(state) = query.auth_client_state else {
                 return Err("missing auth_client_state".to_string());
             };
 
             use crate::oauth::AuthQuery;
-            use base64::{Engine, prelude::BASE64_URL_SAFE};
+            use base64::{prelude::BASE64_URL_SAFE, Engine};
 
             let auth_client_query_raw = BASE64_URL_SAFE
                 .decode(state)
                 .map_err(|e| format!("invalid state {e:?}"))?;
             let auth_client_query: AuthQuery = postcard::from_bytes(&auth_client_query_raw)
-                .map_err(|e| format!("invalid auth query {}", e.to_string()))?;
+                .map_err(|e| format!("invalid auth query {}", e))?;
 
             Ok(auth_client_query)
         },
     );
 
     let (phone_number, set_phone_number) = signal(String::new());
-    let (error_message, set_error_message) = signal(Option::<String>::None);
+    let (error_message, _set_error_message) = signal(Option::<String>::None);
 
     view! {
         <Suspense fallback=|| {
@@ -172,7 +171,7 @@ pub fn PhoneAuthLogin() -> impl IntoView {
                                                 on:click=move |_| {
                                                     let auth_client_query = auth_client_query.clone();
                                                     let phone_number = phone_number.get();
-                                                    let submit_action = submit_action.clone();
+                                                    let submit_action = submit_action;
                                                     submit_action.dispatch((auth_client_query, phone_number));
                                                 }
                                                 disabled=move || {

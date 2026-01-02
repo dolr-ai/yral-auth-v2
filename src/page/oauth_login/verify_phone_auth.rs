@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use leptos::html::nav;
 use leptos::logging::log;
 use leptos::prelude::*;
 use leptos_router::hooks::use_query;
@@ -8,35 +7,34 @@ use leptos_router::params::Params;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-use crate::error::AuthError;
 use crate::components::otp_input::OtpInput;
+use crate::error::AuthError;
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Serialize, Params)]
 struct VerifyQuery {
     phone: Option<String>,
     auth_client_state: Option<String>,
-
 }
-
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct VerifyPhoneOtpRequest {
-    pub code: String, //otp code
+    pub code: String,         //otp code
     pub phone_number: String, // phone number
-    pub client_state: String // client state (csrf token)
+    pub client_state: String, // client state (csrf token)
 }
 
 #[server]
-pub async fn verify_phone_auth(verify_request: VerifyPhoneOtpRequest) -> Result<(String, Url), AuthError> {
-    use crate::context::server::ServerCtx;
+pub async fn verify_phone_auth(
+    verify_request: VerifyPhoneOtpRequest,
+) -> Result<(String, Url), AuthError> {
     use crate::api::phone_auth::verify_phone_one_time_passcode;
+    use crate::context::server::ServerCtx;
 
     let server_ctx = expect_context::<Arc<ServerCtx>>();
 
     let (token, redirect_uri) = verify_phone_one_time_passcode(&server_ctx, verify_request).await?;
 
     Ok((token, redirect_uri))
-
 }
 
 #[component]
@@ -62,20 +60,19 @@ pub fn VerifyPhoneAuth() -> impl IntoView {
             if let Ok(q) = query_result {
                 let phone = q.phone.clone().unwrap_or_default();
                 let client_state = q.auth_client_state.clone().unwrap_or_default();
-                
+
                 let verify_request = VerifyPhoneOtpRequest {
                     code: otp,
                     phone_number: phone,
                     client_state,
                 };
-                
+
                 let navigate = leptos_router::hooks::use_navigate();
                 match verify_phone_auth(verify_request).await {
                     Ok(token) => {
-
                         let (_token, redirect_uri) = token;
                         // Only call use_navigate on the client, not during SSR
-                        navigate(&redirect_uri.to_string(), Default::default());
+                        navigate(redirect_uri.as_ref(), Default::default());
                         Ok(())
                     }
                     Err(e) => {
@@ -96,10 +93,8 @@ pub fn VerifyPhoneAuth() -> impl IntoView {
 
     // Watch for action completion and update error message
     Effect::new(move |_| {
-        if let Some(result) = verify_action.value().get() {
-            if let Err(e) = result {
+        if let Some(Err(e)) = verify_action.value().get() {
                 set_error_message.set(Some(e));
-            }
         }
     });
 

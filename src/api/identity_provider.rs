@@ -1,8 +1,12 @@
 use candid::Principal;
 use ic_agent::Identity;
 
-use crate::{error::AuthErrorKind, kv::{KVStore, KVStoreImpl}, oauth::{AuthLoginHint, SupportedOAuthProviders}, utils::identity::generate_random_identity_and_save};
-
+use crate::{
+    error::AuthErrorKind,
+    kv::{KVStore, KVStoreImpl},
+    oauth::{AuthLoginHint, SupportedOAuthProviders},
+    utils::identity::generate_random_identity_and_save,
+};
 
 pub fn login_hint_message() -> yral_identity::msg_builder::Message {
     use yral_identity::msg_builder::Message;

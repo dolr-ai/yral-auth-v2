@@ -82,7 +82,7 @@ impl FromServerFnError for AuthError {
 
     fn from_server_fn_error(value: ServerFnErrorErr) -> Self {
         let auth_error_kind =
-            AuthErrorKind::unexpected(format!("Server function error: {}", value.to_string()));
+            AuthErrorKind::unexpected(format!("Server function error: {}", value));
         AuthError {
             error_description: auth_error_kind.to_string(),
             error: auth_error_kind,
@@ -93,7 +93,7 @@ impl FromServerFnError for AuthError {
 #[cfg(feature = "ssr")]
 impl AuthErrorKind {
     pub fn status_code(&self) -> axum::http::StatusCode {
-        let status_code = match &self {
+        match &self {
             AuthErrorKind::InvalidUri(_)
             | AuthErrorKind::InvalidCodeChallengeMethod(_)
             | AuthErrorKind::InvalidCodeChallenge(_)
@@ -113,8 +113,6 @@ impl AuthErrorKind {
 
             AuthErrorKind::Banned => axum::http::StatusCode::FORBIDDEN,
             AuthErrorKind::Unexpected(_) => axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-        };
-
-        status_code
+        }
     }
 }

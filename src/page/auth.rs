@@ -13,7 +13,9 @@ use crate::{
     components::{spinner::Spinner, whatsapp_symbol::WhatsAppSymbol, yral_symbol::YralSymbol},
     error::AuthErrorKind,
     oauth::{
-        AuthCodeError, AuthLoginHint, AuthQuery, AuthResponse as AuthResponseCode, CodeChallenge, CodeChallengeMethod, SupportedOAuthProviders, client_validation::{ClientIdValidator, ClientIdValidatorImpl}
+        client_validation::{ClientIdValidator, ClientIdValidatorImpl},
+        AuthCodeError, AuthLoginHint, AuthQuery, AuthResponse as AuthResponseCode, CodeChallenge,
+        CodeChallengeMethod, SupportedOAuthProviders,
     },
 };
 
@@ -229,9 +231,6 @@ pub fn LoginContent(auth: Box<AuthQuery>) -> impl IntoView {
         </div>
     }
 }
-
-
-
 
 #[component]
 pub fn LoginButton(

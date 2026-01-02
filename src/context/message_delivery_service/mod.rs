@@ -1,12 +1,14 @@
-use async_trait::async_trait;
 use thiserror::Error;
 
 #[async_trait::async_trait]
 pub trait MessageDeliveryService: Send + Sync {
-    async fn send_message(&self, recipient: &str, message: &str) -> Result<(), MessageDeliveryError>;
+    async fn send_message(
+        &self,
+        recipient: &str,
+        message: &str,
+    ) -> Result<(), MessageDeliveryError>;
 }
 
-    
 #[derive(Debug, Error)]
 pub enum MessageDeliveryError {
     ServiceUnavailable,
@@ -25,7 +27,6 @@ impl std::fmt::Display for MessageDeliveryError {
         }
     }
 }
-
 
 const WHATSAPP_PHONE_ID: &str = "940408239151860";
 const WHATSAPP_API_URL: &str = "https://graph.facebook.com/v24.0/";
@@ -46,8 +47,11 @@ impl WhatsAppMessageDeliveryService {
 
 #[async_trait::async_trait]
 impl MessageDeliveryService for WhatsAppMessageDeliveryService {
-
-    async fn send_message(&self, recipient: &str, message: &str) -> Result<(), MessageDeliveryError> {
+    async fn send_message(
+        &self,
+        recipient: &str,
+        message: &str,
+    ) -> Result<(), MessageDeliveryError> {
         // WhatsApp template payload as required
         let payload = serde_json::json!({
             "messaging_product": "whatsapp",
@@ -82,7 +86,6 @@ impl MessageDeliveryService for WhatsAppMessageDeliveryService {
                 ]
             }
         });
-
 
         let url = format!("{}{}{}", WHATSAPP_API_URL, WHATSAPP_PHONE_ID, "/messages");
         let response = self
