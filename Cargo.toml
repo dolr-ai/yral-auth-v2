@@ -71,7 +71,7 @@ tower = { version = "0.4", optional = true }
 
 yral-types = { git = "https://github.com/yral-dapp/yral-common.git", branch = "master" }
 yral-identity = { git = "https://github.com/yral-dapp/yral-common.git", branch = "master", default-features = false }
-reqwest = { version = "0.13.1", default-features=false, features = ["json", "rustls"]}
+reqwest = { version = "0.12.3", default-features=false, features = ["json", "rustls-tls"]}
 async-trait = "0.1.89"
 
 [features]
