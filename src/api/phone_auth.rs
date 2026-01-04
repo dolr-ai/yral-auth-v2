@@ -100,7 +100,7 @@ async fn send_authorization_code_for_phone_number(
         .await
         .map_err(|e| match e {
             MessageDeliveryError::InvalidRecipient => AuthErrorKind::InvalidPhoneNumber,
-            _ => AuthErrorKind::Unexpected("Failed to send OTP".to_string()),
+            _ => AuthErrorKind::Unexpected(format!("Failed to send OTP: {e}")),
         })?;
 
     Ok(token)

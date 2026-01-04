@@ -11,7 +11,7 @@ pub trait MessageDeliveryService: Send + Sync {
 
 #[derive(Debug, Error)]
 pub enum MessageDeliveryError {
-    ServiceUnavailable,
+    ServiceUnavailable(String),
     InvalidRecipient,
     MessageTooLong,
     Unknown,
@@ -20,7 +20,7 @@ pub enum MessageDeliveryError {
 impl std::fmt::Display for MessageDeliveryError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            MessageDeliveryError::ServiceUnavailable => write!(f, "Service is unavailable"),
+            MessageDeliveryError::ServiceUnavailable(e) => write!(f, "Service is unavailable: {e}"),
             MessageDeliveryError::InvalidRecipient => write!(f, "Invalid recipient"),
             MessageDeliveryError::MessageTooLong => write!(f, "Message is too long"),
             MessageDeliveryError::Unknown => write!(f, "Unknown error"),
@@ -95,7 +95,7 @@ impl MessageDeliveryService for WhatsAppMessageDeliveryService {
             .json(&payload)
             .send()
             .await
-            .map_err(|_| MessageDeliveryError::ServiceUnavailable)?;
+            .map_err(|e| MessageDeliveryError::ServiceUnavailable(format!("{e:?}")))?;
 
         if response.status().is_success() {
             Ok(())
