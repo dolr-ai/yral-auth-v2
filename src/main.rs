@@ -70,7 +70,7 @@ fn setup_sentry_subscriber() {
 
 #[tokio::main]
 async fn main() {
-    #[cfg(feature = "release-bin")]
+    #[cfg(any(feature = "release-bin", feature = "release-lib"))]
     {
         let _guard = sentry::init((
             "https://12cd069502a3fdb82d39313b26689aee@apm.yral.com/3",
