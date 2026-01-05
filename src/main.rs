@@ -70,15 +70,17 @@ fn setup_sentry_subscriber() {
 
 #[tokio::main]
 async fn main() {
-
     #[cfg(feature = "release-bin")]
     {
-
         let _guard = sentry::init((
             "https://12cd069502a3fdb82d39313b26689aee@apm.yral.com/3",
             sentry::ClientOptions {
                 release: sentry::release_name!(),
-                environment: Some(std::env::var("APP_ENV").unwrap_or("production".to_owned()).into()),
+                environment: Some(
+                    std::env::var("APP_ENV")
+                        .unwrap_or("production".to_owned())
+                        .into(),
+                ),
                 traces_sample_rate: std::env::var("SENTRY_TRACES_SAMPLE_RATE")
                     .ok()
                     .and_then(|s| s.parse().ok())
@@ -91,9 +93,7 @@ async fn main() {
         ));
 
         setup_sentry_subscriber();
-
     }
-
 
     let conf = get_configuration(None).unwrap();
     let addr = conf.leptos_options.site_addr;
