@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use leptos::logging::log;
 use leptos::prelude::*;
+use leptos::server_fn::codec::Json;
 use leptos_router::hooks::use_query;
 use leptos_router::params::Params;
 use serde::{Deserialize, Serialize};
@@ -23,7 +24,7 @@ pub struct VerifyPhoneOtpRequest {
     pub client_state: String, // client state (csrf token)
 }
 
-#[server]
+#[server(endpoint = "/verify_phone_auth", input = Json, output = Json)]
 pub async fn verify_phone_auth(
     verify_request: VerifyPhoneOtpRequest,
 ) -> Result<(String, Url), AuthError> {
