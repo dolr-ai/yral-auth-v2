@@ -43,8 +43,6 @@ jobs:
       - name: Deploy
         id: deploy
         uses: superfly/fly-pr-review-apps@1.2.1
-        with:
-          config: preview-fly.toml
         env:
           FLYCTL_VERSION: v0.3.144
 
