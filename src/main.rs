@@ -74,6 +74,11 @@ async fn main() {
         "https://12cd069502a3fdb82d39313b26689aee@apm.yral.com/3",
         sentry::ClientOptions {
             release: sentry::release_name!(),
+            environment: Some(
+                std::env::var("APP_ENV")
+                    .unwrap_or("local".to_owned())
+                    .into(),
+            ),
             traces_sample_rate: std::env::var("SENTRY_TRACES_SAMPLE_RATE")
                 .ok()
                 .and_then(|s| s.parse().ok())
@@ -98,8 +103,8 @@ async fn main() {
     let ctx = Arc::new(ServerCtx::new().await);
 
     // Start background JWK refresh task for Google OAuth
+    #[cfg(feature = "google-oauth")]
     ctx.start_jwk_refresh_task();
-    println!("Started JWK refresh background task");
 
     let app_state = ServerState {
         leptos_options,
@@ -113,7 +118,7 @@ async fn main() {
 
     let app = Router::new()
         .route(
-            "/api/*fn_name",
+            "/api/{*fn_name}",
             get(server_fn_handler).post(server_fn_handler),
         )
         .leptos_routes_with_handler(routes, get(leptos_routes_handler))

@@ -1,6 +1,7 @@
 # fly.toml - used for PR preview deployments on Fly.io
 # Production deployment is on Hetzner (see deploy-hetzner.yml)
 
+app = 'yral-auth-v2'
 primary_region = 'sin'
 
 [build]
@@ -19,7 +20,7 @@ MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEoqN3/0RNfrnrnYGxKBgy/qHnmITr
 MCowBQYDK2VwAyEAKpZNfPOONR9AXiaGmHv8AHemm4SNK0uh+mf523ho5KU=
 -----END PUBLIC KEY-----"""
   SERVER_URL = "https://auth.yral.com"
-  APP_ENV = "preview"
+  APP_ENV = "production"
 
 [http_service]
   internal_port = 8080

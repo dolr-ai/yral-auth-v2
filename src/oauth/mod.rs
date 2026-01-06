@@ -20,15 +20,23 @@ pub mod client_validation;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Hash, Serialize, Deserialize)]
 pub enum SupportedOAuthProviders {
+    #[cfg(feature = "google-oauth")]
     Google,
+    #[cfg(feature = "apple-oauth")]
     Apple,
+    #[cfg(feature = "phone-auth")]
+    Phone,
 }
 
 impl Display for SupportedOAuthProviders {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            #[cfg(feature = "google-oauth")]
             Self::Google => write!(f, "google"),
+            #[cfg(feature = "apple-oauth")]
             Self::Apple => write!(f, "apple"),
+            #[cfg(feature = "phone-auth")]
+            Self::Phone => write!(f, "phone"),
         }
     }
 }
@@ -38,43 +46,114 @@ impl FromStr for SupportedOAuthProviders {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
+            #[cfg(feature = "google-oauth")]
             "google" => Ok(Self::Google),
+            #[cfg(feature = "apple-oauth")]
             "apple" => Ok(Self::Apple),
+            #[cfg(feature = "phone-auth")]
+            "phone" => Ok(Self::Phone),
             _ => Err(AuthErrorKind::InvalidProvider(s.to_string())),
         }
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub struct AuthResponseCode;
+pub enum AuthResponse {
+    #[serde(rename = "code")]
+    Code,
+}
 
-impl FromStr for AuthResponseCode {
+impl Display for AuthResponse {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            AuthResponse::Code => write!(f, "code"),
+        }
+    }
+}
+
+impl FromStr for AuthResponse {
     type Err = AuthErrorKind;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "code" => Ok(Self),
+            "code" => Ok(Self::Code),
             _ => Err(AuthErrorKind::InvalidResponseType(s.to_string())),
         }
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub struct CodeChallengeMethodS256;
+use serde::de::{self, Deserializer, Visitor};
 
-impl FromStr for CodeChallengeMethodS256 {
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub enum CodeChallengeMethod {
+    #[serde(rename = "S256")]
+    S256,
+}
+
+impl FromStr for CodeChallengeMethod {
     type Err = AuthErrorKind;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "S256" => Ok(Self),
+            "S256" => Ok(Self::S256),
             _ => Err(AuthErrorKind::InvalidCodeChallengeMethod(s.to_string())),
         }
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct CodeChallenge(pub [u8; 32]);
+
+impl Serialize for CodeChallenge {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        if serializer.is_human_readable() {
+            // JSON, query params, text formats
+            let encoded = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(self.0);
+
+            serializer.serialize_str(&encoded)
+        } else {
+            // postcard / bincode / binary formats
+            serializer.serialize_newtype_struct("CodeChallenge", &self.0)
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for CodeChallenge {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        if deserializer.is_human_readable() {
+            // JSON, query params
+            struct StrVisitor;
+
+            impl<'de> Visitor<'de> for StrVisitor {
+                type Value = CodeChallenge;
+
+                fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                    f.write_str("a base64url-encoded PKCE code_challenge")
+                }
+
+                fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+                where
+                    E: de::Error,
+                {
+                    use std::str::FromStr;
+                    CodeChallenge::from_str(v).map_err(E::custom)
+                }
+            }
+
+            deserializer.deserialize_str(StrVisitor)
+        } else {
+            // postcard / bincode
+            let arr = <[u8; 32]>::deserialize(deserializer)?;
+            Ok(CodeChallenge(arr))
+        }
+    }
+}
 
 impl FromStr for CodeChallenge {
     type Err = AuthErrorKind;
@@ -108,21 +187,15 @@ impl FromStr for AuthLoginHint {
     }
 }
 
-pub fn login_hint_message() -> yral_identity::msg_builder::Message {
-    use yral_identity::msg_builder::Message;
-
-    Message::default().method_name("yral_auth_v2_login_hint".into())
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 
 pub struct AuthQuery {
-    pub response_type: AuthResponseCode,
+    pub response_type: AuthResponse,
     pub client_id: String,
     pub redirect_uri: Url,
     pub state: String,
     pub code_challenge: CodeChallenge,
-    pub code_challenge_method: CodeChallengeMethodS256,
+    pub code_challenge_method: CodeChallengeMethod,
     pub nonce: Option<String>,
     pub login_hint: Option<AuthLoginHint>,
 }
@@ -179,6 +252,13 @@ impl From<AuthErrorKind> for AuthCodeErrorKind {
             AuthErrorKind::InvalidLoginHint => Self::InvalidRequest,
             AuthErrorKind::InvalidProvider(_) => Self::ServerError,
             AuthErrorKind::Banned => Self::AccessDenied,
+            AuthErrorKind::InvalidPhoneNumber => Self::InvalidRequest,
+            AuthErrorKind::OtpCookieNotFound => Self::InvalidRequest,
+            AuthErrorKind::InvalidOtp => Self::InvalidRequest,
+            AuthErrorKind::ExpiredOtp => Self::InvalidRequest,
+            AuthErrorKind::PhoneMismatch => Self::InvalidRequest,
+            AuthErrorKind::AuthClientCookieNotFound => Self::InvalidRequest,
+            AuthErrorKind::InvalidOtpToken(_) => Self::InvalidRequest,
         }
     }
 }

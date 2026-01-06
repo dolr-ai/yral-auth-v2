@@ -1,5 +1,7 @@
 use std::fmt::Display;
 
+use leptos::{prelude::*, server_fn::codec::JsonEncoding};
+
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -25,8 +27,44 @@ pub enum AuthErrorKind {
     InvalidProvider(String),
     #[error("Invalid login hint")]
     InvalidLoginHint,
+    #[error("Invalid phone number")]
+    InvalidPhoneNumber,
     #[error("User has been banned")]
     Banned,
+    // Merged from VerifyPhoneErrorKind
+    #[error("OTP cookie not found")]
+    OtpCookieNotFound,
+    #[error("Invalid OTP code")]
+    InvalidOtp,
+    #[error("Expired OTP")]
+    ExpiredOtp,
+    #[error("Phone number mismatch")]
+    PhoneMismatch,
+    #[error("Auth client cookie not found")]
+    AuthClientCookieNotFound,
+    #[error("Invalid OTP token: {0}")]
+    InvalidOtpToken(String),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Error)]
+pub struct AuthError {
+    error: AuthErrorKind,
+    error_description: String,
+}
+
+impl Display for AuthError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.error_description)
+    }
+}
+
+impl From<AuthErrorKind> for AuthError {
+    fn from(value: AuthErrorKind) -> Self {
+        AuthError {
+            error_description: value.to_string(),
+            error: value,
+        }
+    }
 }
 
 impl AuthErrorKind {
@@ -36,5 +74,45 @@ impl AuthErrorKind {
 
     pub fn unexpected(msg: impl Display) -> Self {
         Self::Unexpected(msg.to_string())
+    }
+}
+
+impl FromServerFnError for AuthError {
+    type Encoder = JsonEncoding;
+
+    fn from_server_fn_error(value: ServerFnErrorErr) -> Self {
+        let auth_error_kind =
+            AuthErrorKind::unexpected(format!("Server function error: {}", value));
+        AuthError {
+            error_description: auth_error_kind.to_string(),
+            error: auth_error_kind,
+        }
+    }
+}
+
+#[cfg(feature = "ssr")]
+impl AuthErrorKind {
+    pub fn status_code(&self) -> axum::http::StatusCode {
+        match &self {
+            AuthErrorKind::InvalidUri(_)
+            | AuthErrorKind::InvalidCodeChallengeMethod(_)
+            | AuthErrorKind::InvalidCodeChallenge(_)
+            | AuthErrorKind::InvalidProvider(_)
+            | AuthErrorKind::InvalidLoginHint
+            | AuthErrorKind::InvalidPhoneNumber
+            | AuthErrorKind::UnauthorizedClient(_)
+            | AuthErrorKind::UnauthorizedRedirectUri(_)
+            | AuthErrorKind::InvalidResponseType(_)
+            | AuthErrorKind::MissingParam(_)
+            | AuthErrorKind::InvalidOtp
+            | AuthErrorKind::ExpiredOtp
+            | AuthErrorKind::PhoneMismatch
+            | AuthErrorKind::AuthClientCookieNotFound
+            | AuthErrorKind::OtpCookieNotFound
+            | AuthErrorKind::InvalidOtpToken(_) => axum::http::StatusCode::BAD_REQUEST,
+
+            AuthErrorKind::Banned => axum::http::StatusCode::FORBIDDEN,
+            AuthErrorKind::Unexpected(_) => axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+        }
     }
 }
