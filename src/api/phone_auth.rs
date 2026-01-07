@@ -52,12 +52,13 @@ pub async fn generate_otp_and_set_cookie(
     let auth_client_query_raw = serde_json::to_string(&auth_client_query)
         .map_err(|e| AuthErrorKind::Unexpected(e.to_string()))?;
 
-    let client_auth_query_cookie = Cookie::build((AUTH_CLIENT_QUERY_COOKIE_NAME, auth_client_query_raw))
-        .http_only(true)
-        .secure(true)
-        .path("/")
-        .same_site(axum_extra::extract::cookie::SameSite::None)
-        .build();
+    let client_auth_query_cookie =
+        Cookie::build((AUTH_CLIENT_QUERY_COOKIE_NAME, auth_client_query_raw))
+            .http_only(true)
+            .secure(true)
+            .path("/")
+            .same_site(axum_extra::extract::cookie::SameSite::None)
+            .build();
 
     let cookie = private_cookie_jar.add(otp_cookie);
     let cookie = cookie.add(client_auth_query_cookie);
@@ -90,8 +91,8 @@ async fn send_authorization_code_for_phone_number(
         exp: expiry.as_nanos() as u64,
     };
 
-
-    let token = serde_json::to_string(&otp_claim).map_err(|e| AuthErrorKind::Unexpected(e.to_string()))?;
+    let token =
+        serde_json::to_string(&otp_claim).map_err(|e| AuthErrorKind::Unexpected(e.to_string()))?;
 
     //TODO: send OTP to user via SMS gateway
     ctx.message_delivery_service
@@ -131,9 +132,10 @@ pub async fn verify_phone_one_time_passcode(
 
     let otp_token_raw_str = otp_cookie.value().to_owned();
 
-    let otp_token = serde_json::from_str::<OneTimePassCodeClaim>(&otp_token_raw_str).map_err(|_e| {
-        AuthErrorKind::Unexpected("failed to deserialize otp token claims".to_owned())
-    })?;
+    let otp_token =
+        serde_json::from_str::<OneTimePassCodeClaim>(&otp_token_raw_str).map_err(|_e| {
+            AuthErrorKind::Unexpected("failed to deserialize otp token claims".to_owned())
+        })?;
 
     if otp_token.phone_number != verify_request.phone_number {
         return Err(AuthErrorKind::PhoneMismatch);

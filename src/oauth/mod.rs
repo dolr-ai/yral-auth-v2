@@ -38,6 +38,7 @@ impl Display for SupportedOAuthProviders {
             Self::Apple => write!(f, "apple"),
             #[cfg(feature = "phone-auth")]
             Self::Phone => write!(f, "phone"),
+            #[allow(unreachable_patterns)]
             _ => Err(fmt::Error),
         }
     }
