@@ -19,6 +19,7 @@ use crate::{consts::ACCESS_TOKEN_MAX_AGE, error::AuthErrorKind};
 pub mod client_validation;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Hash, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum SupportedOAuthProviders {
     #[cfg(feature = "google-oauth")]
     Google,
@@ -37,6 +38,8 @@ impl Display for SupportedOAuthProviders {
             Self::Apple => write!(f, "apple"),
             #[cfg(feature = "phone-auth")]
             Self::Phone => write!(f, "phone"),
+            #[allow(unreachable_patterns)]
+            _ => Err(fmt::Error),
         }
     }
 }
@@ -306,6 +309,27 @@ impl AuthCodeError {
             res.push_str(&format!("&state={state}"));
         }
         res
+    }
+
+    #[cfg(not(feature = "ssr"))]
+    pub fn capture(self) -> Self {
+        self
+    }
+
+    #[cfg(feature = "ssr")]
+    pub fn capture(self) -> Self {
+        sentry::with_scope(
+            |scope| {
+                scope.set_tag("flow", "oauth_callback");
+                scope.set_tag("error_kind", self.error.to_string());
+                scope.set_extra("auth_error_message", self.error_description.clone().into());
+            },
+            || {
+                sentry::capture_message("OAuth callback failed", sentry::Level::Error);
+            },
+        );
+
+        self
     }
 }
 

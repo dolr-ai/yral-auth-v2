@@ -20,6 +20,9 @@ use crate::{
     utils::{cookies::set_cookies, time::current_epoch},
 };
 
+pub const OTP_COOKIE_NAME: &str = "otp_token";
+pub const AUTH_CLIENT_QUERY_COOKIE_NAME: &str = "auth_client_query";
+
 #[derive(Serialize, Deserialize)]
 struct OneTimePassCodeClaim {
     pub phone_number: String,
@@ -39,7 +42,7 @@ pub async fn generate_otp_and_set_cookie(
     let token =
         send_authorization_code_for_phone_number(server_context, phone_number.clone()).await?;
 
-    let otp_cookie = Cookie::build(("otp_token", token.clone()))
+    let otp_cookie = Cookie::build((OTP_COOKIE_NAME, token.clone()))
         .http_only(true)
         .secure(true)
         .path("/")
@@ -49,12 +52,13 @@ pub async fn generate_otp_and_set_cookie(
     let auth_client_query_raw = serde_json::to_string(&auth_client_query)
         .map_err(|e| AuthErrorKind::Unexpected(e.to_string()))?;
 
-    let client_auth_query_cookie = Cookie::build(("auth_client_query", auth_client_query_raw))
-        .http_only(true)
-        .secure(true)
-        .path("/")
-        .same_site(axum_extra::extract::cookie::SameSite::None)
-        .build();
+    let client_auth_query_cookie =
+        Cookie::build((AUTH_CLIENT_QUERY_COOKIE_NAME, auth_client_query_raw))
+            .http_only(true)
+            .secure(true)
+            .path("/")
+            .same_site(axum_extra::extract::cookie::SameSite::None)
+            .build();
 
     let cookie = private_cookie_jar.add(otp_cookie);
     let cookie = cookie.add(client_auth_query_cookie);
@@ -87,12 +91,8 @@ async fn send_authorization_code_for_phone_number(
         exp: expiry.as_nanos() as u64,
     };
 
-    let token = jsonwebtoken::encode(
-        &jsonwebtoken::Header::new(jsonwebtoken::Algorithm::ES256),
-        &otp_claim,
-        &ctx.jwk_pairs.auth_tokens.encoding_key,
-    )
-    .map_err(|e| AuthErrorKind::Unexpected(e.to_string()))?;
+    let token =
+        serde_json::to_string(&otp_claim).map_err(|e| AuthErrorKind::Unexpected(e.to_string()))?;
 
     //TODO: send OTP to user via SMS gateway
     ctx.message_delivery_service
@@ -110,14 +110,14 @@ pub async fn verify_phone_one_time_passcode(
     server_context: &Arc<ServerCtx>,
     verify_request: VerifyPhoneOtpRequest,
 ) -> Result<(String, Url), AuthErrorKind> {
-    let private_cookie_jar: PrivateCookieJar = extract_with_state(&server_context.cookie_key)
+    let mut private_cookie_jar: PrivateCookieJar = extract_with_state(&server_context.cookie_key)
         .await
         .map_err(|e| AuthErrorKind::Unexpected(e.to_string()))?;
     let otp_cookie = private_cookie_jar
-        .get("otp_token")
+        .get(OTP_COOKIE_NAME)
         .ok_or(AuthErrorKind::OtpCookieNotFound)?;
     let auth_client_query_raw = private_cookie_jar
-        .get("auth_client_query")
+        .get(AUTH_CLIENT_QUERY_COOKIE_NAME)
         .ok_or(AuthErrorKind::AuthClientCookieNotFound)?
         .value()
         .to_string();
@@ -130,20 +130,18 @@ pub async fn verify_phone_one_time_passcode(
         return Err(AuthErrorKind::Unexpected("state token mismatch".to_owned()));
     }
 
-    let token = otp_cookie.value().to_owned();
+    let otp_token_raw_str = otp_cookie.value().to_owned();
 
-    let decoded_token = jsonwebtoken::decode::<OneTimePassCodeClaim>(
-        &token,
-        &server_context.jwk_pairs.auth_tokens.decoding_key,
-        &jsonwebtoken::Validation::new(jsonwebtoken::Algorithm::ES256),
-    )
-    .map_err(|e| AuthErrorKind::InvalidOtpToken(e.to_string()))?;
+    let otp_token =
+        serde_json::from_str::<OneTimePassCodeClaim>(&otp_token_raw_str).map_err(|_e| {
+            AuthErrorKind::Unexpected("failed to deserialize otp token claims".to_owned())
+        })?;
 
-    if decoded_token.claims.phone_number != verify_request.phone_number {
+    if otp_token.phone_number != verify_request.phone_number {
         return Err(AuthErrorKind::PhoneMismatch);
     }
 
-    if decoded_token.claims.exp < current_epoch().as_nanos() as u64 {
+    if otp_token.exp < current_epoch().as_nanos() as u64 {
         return Err(AuthErrorKind::ExpiredOtp);
     }
 
@@ -152,7 +150,7 @@ pub async fn verify_phone_one_time_passcode(
 
     let code_hash = hex::encode(hasher.finalize());
 
-    if code_hash.as_bytes() != decoded_token.claims.code_hash_s256 {
+    if code_hash.as_bytes() != otp_token.code_hash_s256 {
         return Err(AuthErrorKind::InvalidOtp);
     }
     let provider = SupportedOAuthProviders::Phone;
@@ -191,6 +189,12 @@ pub async fn verify_phone_one_time_passcode(
         auth_client_query,
         None,
     );
+
+    private_cookie_jar = private_cookie_jar.remove(OTP_COOKIE_NAME);
+    private_cookie_jar = private_cookie_jar.remove(AUTH_CLIENT_QUERY_COOKIE_NAME);
+
+    let response_options: ResponseOptions = expect_context();
+    set_cookies(&response_options, private_cookie_jar);
 
     redirect_uri
         .query_pairs_mut()
