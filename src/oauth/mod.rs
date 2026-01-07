@@ -19,6 +19,7 @@ use crate::{consts::ACCESS_TOKEN_MAX_AGE, error::AuthErrorKind};
 pub mod client_validation;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Hash, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum SupportedOAuthProviders {
     #[cfg(feature = "google-oauth")]
     Google,
@@ -37,6 +38,7 @@ impl Display for SupportedOAuthProviders {
             Self::Apple => write!(f, "apple"),
             #[cfg(feature = "phone-auth")]
             Self::Phone => write!(f, "phone"),
+            _ => Err(fmt::Error),
         }
     }
 }
