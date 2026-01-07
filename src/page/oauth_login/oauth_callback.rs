@@ -52,18 +52,21 @@ pub fn OAuthCallbackPage() -> impl IntoView {
                     AuthErrorKind::missing_param("state"),
                     None,
                     "/error",
-                ));
+                )
+                .capture());
             };
             let Some(code) = query.code else {
                 return Err(AuthCodeError::new(
                     AuthErrorKind::missing_param("code"),
                     None,
                     "/error",
-                ));
+                )
+                .capture());
             };
 
             perform_oauth_login(code, state_b64).await.map_err(|e| {
                 AuthCodeError::new(AuthErrorKind::Unexpected(e.to_string()), None, "/error")
+                    .capture()
             })
         },
     );

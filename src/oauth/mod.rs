@@ -310,6 +310,27 @@ impl AuthCodeError {
         }
         res
     }
+
+    #[cfg(not(feature = "ssr"))]
+    pub fn capture(self) -> Self {
+        self
+    }
+
+    #[cfg(feature = "ssr")]
+    pub fn capture(self) -> Self {
+        sentry::with_scope(
+            |scope| {
+                scope.set_tag("flow", "oauth_callback");
+                scope.set_tag("error_kind", self.error.to_string());
+                scope.set_extra("auth_error_message", self.error_description.clone().into());
+            },
+            || {
+                sentry::capture_message("OAuth callback failed", sentry::Level::Error);
+            },
+        );
+
+        self
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
