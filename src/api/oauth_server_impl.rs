@@ -101,6 +101,7 @@ pub async fn get_oauth_url_impl(
     let cookie_life = Duration::from_secs(60 * 10).try_into().unwrap(); // 10 minutes
     let pkce_cookie = Cookie::build((PKCE_VERIFIER_COOKIE, pkce_verifier.secret().clone()))
         .same_site(SameSite::None)
+        .secure(true)
         .path("/")
         .max_age(cookie_life)
         .http_only(true)
@@ -109,6 +110,7 @@ pub async fn get_oauth_url_impl(
 
     let csrf_cookie = Cookie::build((CSRF_TOKEN_COOKIE, oauth_csrf_token.secret().clone()))
         .same_site(SameSite::None)
+        .secure(true)
         .path("/")
         .max_age(cookie_life)
         .http_only(true)
