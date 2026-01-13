@@ -5,7 +5,7 @@ use leptos::{prelude::*, server_fn::codec::JsonEncoding};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-#[derive(Error, Debug, Clone, Serialize, Deserialize)]
+#[derive(Error, Debug, Clone)]
 pub enum AuthErrorKind {
     #[error("Invalid response type: {0}")]
     InvalidResponseType(String),
@@ -31,7 +31,6 @@ pub enum AuthErrorKind {
     InvalidPhoneNumber,
     #[error("User has been banned")]
     Banned,
-    // Merged from VerifyPhoneErrorKind
     #[error("OTP cookie not found")]
     OtpCookieNotFound,
     #[error("Invalid OTP code")]
@@ -44,6 +43,109 @@ pub enum AuthErrorKind {
     AuthClientCookieNotFound,
     #[error("Invalid OTP token: {0}")]
     InvalidOtpToken(String),
+}
+
+use serde::de::{self, Deserializer, Visitor};
+use serde::ser::Serializer;
+use std::fmt;
+
+impl serde::Serialize for AuthErrorKind {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let name = match self {
+            AuthErrorKind::InvalidResponseType(_) => "InvalidResponseType",
+            AuthErrorKind::MissingParam(_) => "MissingParam",
+            AuthErrorKind::Unexpected(_) => "Unexpected",
+            AuthErrorKind::UnauthorizedClient(_) => "UnauthorizedClient",
+            AuthErrorKind::UnauthorizedRedirectUri(_) => "UnauthorizedRedirectUri",
+            AuthErrorKind::InvalidUri(_) => "InvalidUri",
+            AuthErrorKind::InvalidCodeChallengeMethod(_) => "InvalidCodeChallengeMethod",
+            AuthErrorKind::InvalidCodeChallenge(_) => "InvalidCodeChallenge",
+            AuthErrorKind::InvalidProvider(_) => "InvalidProvider",
+            AuthErrorKind::InvalidLoginHint => "InvalidLoginHint",
+            AuthErrorKind::InvalidPhoneNumber => "InvalidPhoneNumber",
+            AuthErrorKind::Banned => "Banned",
+            AuthErrorKind::OtpCookieNotFound => "OtpCookieNotFound",
+            AuthErrorKind::InvalidOtp => "InvalidOtp",
+            AuthErrorKind::ExpiredOtp => "ExpiredOtp",
+            AuthErrorKind::PhoneMismatch => "PhoneMismatch",
+            AuthErrorKind::AuthClientCookieNotFound => "AuthClientCookieNotFound",
+            AuthErrorKind::InvalidOtpToken(_) => "InvalidOtpToken",
+        };
+        serializer.serialize_str(name)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for AuthErrorKind {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct VariantVisitor;
+        impl<'de> Visitor<'de> for VariantVisitor {
+            type Value = AuthErrorKind;
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("a string representing AuthErrorKind variant name")
+            }
+            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                match v {
+                    "InvalidResponseType" => Ok(AuthErrorKind::InvalidResponseType(String::new())),
+                    "MissingParam" => Ok(AuthErrorKind::MissingParam(String::new())),
+                    "Unexpected" => Ok(AuthErrorKind::Unexpected(String::new())),
+                    "UnauthorizedClient" => Ok(AuthErrorKind::UnauthorizedClient(String::new())),
+                    "UnauthorizedRedirectUri" => {
+                        Ok(AuthErrorKind::UnauthorizedRedirectUri(String::new()))
+                    }
+                    "InvalidUri" => Ok(AuthErrorKind::InvalidUri(String::new())),
+                    "InvalidCodeChallengeMethod" => {
+                        Ok(AuthErrorKind::InvalidCodeChallengeMethod(String::new()))
+                    }
+                    "InvalidCodeChallenge" => {
+                        Ok(AuthErrorKind::InvalidCodeChallenge(String::new()))
+                    }
+                    "InvalidProvider" => Ok(AuthErrorKind::InvalidProvider(String::new())),
+                    "InvalidLoginHint" => Ok(AuthErrorKind::InvalidLoginHint),
+                    "InvalidPhoneNumber" => Ok(AuthErrorKind::InvalidPhoneNumber),
+                    "Banned" => Ok(AuthErrorKind::Banned),
+                    "OtpCookieNotFound" => Ok(AuthErrorKind::OtpCookieNotFound),
+                    "InvalidOtp" => Ok(AuthErrorKind::InvalidOtp),
+                    "ExpiredOtp" => Ok(AuthErrorKind::ExpiredOtp),
+                    "PhoneMismatch" => Ok(AuthErrorKind::PhoneMismatch),
+                    "AuthClientCookieNotFound" => Ok(AuthErrorKind::AuthClientCookieNotFound),
+                    "InvalidOtpToken" => Ok(AuthErrorKind::InvalidOtpToken(String::new())),
+                    _ => Err(E::unknown_variant(
+                        v,
+                        &[
+                            "InvalidResponseType",
+                            "MissingParam",
+                            "Unexpected",
+                            "UnauthorizedClient",
+                            "UnauthorizedRedirectUri",
+                            "InvalidUri",
+                            "InvalidCodeChallengeMethod",
+                            "InvalidCodeChallenge",
+                            "InvalidProvider",
+                            "InvalidLoginHint",
+                            "InvalidPhoneNumber",
+                            "Banned",
+                            "OtpCookieNotFound",
+                            "InvalidOtp",
+                            "ExpiredOtp",
+                            "PhoneMismatch",
+                            "AuthClientCookieNotFound",
+                            "InvalidOtpToken",
+                        ],
+                    )),
+                }
+            }
+        }
+        deserializer.deserialize_str(VariantVisitor)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Error)]
