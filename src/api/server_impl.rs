@@ -14,6 +14,7 @@ use web_time::Duration;
 use yral_types::delegated_identity::DelegatedIdentityWire;
 
 use crate::{
+    api::ai_accounts::get_ai_accounts_for_principal,
     context::server::ServerCtx,
     kv::KVStore,
     oauth::{
@@ -155,6 +156,7 @@ fn generate_access_token_with_identity(
     is_anonymous: bool,
     res: ValidationRes,
     email: Option<String>,
+    bot_delegated_identities: Vec<DelegatedIdentityWire>,
 ) -> TokenGrantRes {
     let delegated_identity = delegate_identity(&identity, res.access_max_age);
     let user_principal = identity.sender().unwrap();
@@ -169,6 +171,7 @@ fn generate_access_token_with_identity(
         is_anonymous,
         res.access_max_age,
         email.clone(),
+        bot_delegated_identities,
     );
     let refresh_token = generate_refresh_token_jwt(
         &ctx.jwk_pairs.auth_tokens.encoding_key,
@@ -212,6 +215,14 @@ async fn generate_access_token(
     })?;
     let id = Secp256k1Identity::from_private_key(sk);
 
+    let ai_accounts = get_ai_accounts_for_principal(ctx, user_principal)
+        .await
+        .unwrap_or_default();
+    let bot_delegated_identities: Vec<DelegatedIdentityWire> = ai_accounts
+        .into_iter()
+        .map(|a| a.delegated_identity)
+        .collect();
+
     let grant = generate_access_token_with_identity(
         ctx,
         id,
@@ -220,6 +231,7 @@ async fn generate_access_token(
         is_anonymous,
         validation_res,
         email,
+        bot_delegated_identities,
     );
 
     Ok(grant)
@@ -388,7 +400,7 @@ async fn client_credentials_grant_for_backend(
         })?;
 
     let grant =
-        generate_access_token_with_identity(ctx, identity, &client_id, None, false, res, None);
+        generate_access_token_with_identity(ctx, identity, &client_id, None, false, res, None, Vec::new());
 
     Ok(grant)
 }
@@ -429,6 +441,7 @@ async fn handle_client_credentials_grant(
         true,
         validation_res,
         None,
+        Vec::new(),
     );
 
     Ok(grant)

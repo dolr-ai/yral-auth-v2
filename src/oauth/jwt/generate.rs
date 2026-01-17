@@ -54,6 +54,7 @@ pub fn generate_access_token_and_id_token_jwt(
     is_anonymous: bool,
     max_age: Duration,
     email: Option<String>,
+    bot_delegated_identities: Vec<DelegatedIdentityWire>,
 ) -> (String, String) {
     let iat = current_epoch_secs();
 
@@ -76,6 +77,7 @@ pub fn generate_access_token_and_id_token_jwt(
         ext_is_anonymous: is_anonymous,
         ext_delegated_identity: identity,
         email,
+        ext_bot_delegated_identities: bot_delegated_identities,
     };
 
     let header = jwt_header();
