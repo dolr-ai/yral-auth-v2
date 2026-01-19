@@ -6,9 +6,9 @@ use ic_agent::{
 use leptos::prelude::*;
 use serde::{Deserialize, Serialize};
 use web_time::Duration;
+use yral_identity::msg_builder::Message;
 use yral_identity::Signature;
 use yral_types::delegated_identity::DelegatedIdentityWire;
-use yral_identity::msg_builder::Message;
 
 #[cfg(feature = "ssr")]
 use crate::{context::server::ServerCtx, kv::KVStore, utils::time::current_epoch};

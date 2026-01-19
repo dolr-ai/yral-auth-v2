@@ -399,8 +399,16 @@ async fn client_credentials_grant_for_backend(
             error_description: e.to_string(),
         })?;
 
-    let grant =
-        generate_access_token_with_identity(ctx, identity, &client_id, None, false, res, None, Vec::new());
+    let grant = generate_access_token_with_identity(
+        ctx,
+        identity,
+        &client_id,
+        None,
+        false,
+        res,
+        None,
+        Vec::new(),
+    );
 
     Ok(grant)
 }
