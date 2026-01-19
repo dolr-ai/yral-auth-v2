@@ -148,6 +148,7 @@ fn delegate_identity(from: &impl Identity, max_age: Duration) -> DelegatedIdenti
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn generate_access_token_with_identity(
     ctx: &ServerCtx,
     identity: Secp256k1Identity,
