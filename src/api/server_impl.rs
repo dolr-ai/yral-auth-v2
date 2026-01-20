@@ -415,7 +415,7 @@ async fn client_credentials_grant_for_backend(
             error_description: e.to_string(),
         })?;
 
-     ctx.dragonfly_kv_store
+    ctx.dragonfly_kv_store
         .write(internal_key, principal.to_text())
         .await
         .map_err(|e| TokenGrantError {
