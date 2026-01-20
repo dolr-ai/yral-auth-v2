@@ -21,7 +21,7 @@ pub fn principal_lookup_key(provider: SupportedOAuthProviders, sub_id: &str) -> 
 pub async fn try_extract_principal_from_oauth_sub(
     provider: SupportedOAuthProviders,
     kv: &KVStoreImpl,
-    dragonfly_kv: &KVStoreImpl,
+    _dragonfly_kv: &KVStoreImpl,
     sub_id: &str,
     email: Option<&str>,
 ) -> Result<Option<String>, AuthErrorKind> {
