@@ -1,6 +1,6 @@
+pub mod dragonfly_kv;
 pub mod redb_kv;
 pub mod redis_kv;
-pub mod dragonfly_kv;
 
 use enum_dispatch::enum_dispatch;
 use redis::RedisError;
@@ -17,7 +17,7 @@ pub enum KVError {
     #[error("{0}")]
     Bb8(#[from] bb8::RunError<RedisError>),
     #[error("{0}")]
-    Other(#[from] anyhow::Error)
+    Other(#[from] anyhow::Error),
 }
 
 #[enum_dispatch]
@@ -32,5 +32,5 @@ pub(crate) trait KVStore: Send {
 pub enum KVStoreImpl {
     ReDB(redb_kv::ReDBKV),
     Redis(redis_kv::RedisKV),
-    Dragonfly(dragonfly_kv::DragonflyKV)
+    Dragonfly(dragonfly_kv::DragonflyKV),
 }

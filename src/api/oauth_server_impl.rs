@@ -22,7 +22,7 @@ use crate::{
     error::AuthErrorKind,
     kv::{KVStore, KVStoreImpl},
     oauth::{
-        AuthLoginHint, AuthQuery, SupportedOAuthProviders, jwt::generate::generate_code_grant_jwt
+        jwt::generate::generate_code_grant_jwt, AuthLoginHint, AuthQuery, SupportedOAuthProviders,
     },
     oauth_provider::OAuthProvider,
     utils::identity::generate_random_identity_and_save,
@@ -209,13 +209,14 @@ async fn principal_from_login_hint_or_generate_and_save(
     )
     .await
     .map_err(|_| AuthErrorKind::unexpected("failed to associated id with oauth"))?;
-    
-    dragonfly_kv.write(
-        principal_lookup_key(provider, sub_id),
-        user_principal.to_text(),
-    )
-    .await
-    .map_err(|_| AuthErrorKind::unexpected("failed to associated id with oauth"))?;
+
+    dragonfly_kv
+        .write(
+            principal_lookup_key(provider, sub_id),
+            user_principal.to_text(),
+        )
+        .await
+        .map_err(|_| AuthErrorKind::unexpected("failed to associated id with oauth"))?;
 
     Ok(user_principal)
 }
@@ -251,10 +252,15 @@ async fn generate_oauth_login_code(
     let sub_id = claims.subject();
     let email = claims.email().map(|e| String::from(e.clone()));
 
-    let maybe_principal =
-        try_extract_principal_from_oauth_sub(provider, &ctx.kv_store, &ctx.dragonfly_kv_store, sub_id, email.as_deref())
-            .await
-            .map_err(AuthErrorKind::unexpected)?;
+    let maybe_principal = try_extract_principal_from_oauth_sub(
+        provider,
+        &ctx.kv_store,
+        &ctx.dragonfly_kv_store,
+        sub_id,
+        email.as_deref(),
+    )
+    .await
+    .map_err(AuthErrorKind::unexpected)?;
     let principal = if let Some(principal_str) = maybe_principal {
         Principal::from_text(principal_str)
             .map_err(|_| AuthErrorKind::unexpected("Invalid principal from KV"))?

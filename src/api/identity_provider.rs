@@ -67,7 +67,7 @@ pub async fn try_extract_principal_from_oauth_sub(
 pub async fn principal_from_login_hint_or_generate_and_save(
     provider: SupportedOAuthProviders,
     kv: &KVStoreImpl,
-    dragonfly_kv:&KVStoreImpl,
+    dragonfly_kv: &KVStoreImpl,
     sub_id: &str,
     login_hint: Option<AuthLoginHint>,
     email: Option<&str>,
@@ -99,8 +99,9 @@ pub async fn principal_from_login_hint_or_generate_and_save(
     )
     .await
     .map_err(|_| AuthErrorKind::unexpected("failed to associated id with oauth"))?;
-    
-    dragonfly_kv.write(
+
+    dragonfly_kv
+        .write(
             principal_lookup_key(provider, sub_id),
             user_principal.to_text(),
         )

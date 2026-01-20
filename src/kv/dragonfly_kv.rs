@@ -521,7 +521,7 @@ impl KVStore for DragonflyKV {
         Ok(())
     }
 
-    async fn has_key(&self,key:String) -> Result<bool,KVError> {
+    async fn has_key(&self, key: String) -> Result<bool, KVError> {
         let mut con = self.0.get().await?;
         let exists: bool = con.exists(key).await?;
         Ok(exists)

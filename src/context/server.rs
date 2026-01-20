@@ -325,7 +325,6 @@ impl ServerCtx {
         {
             use crate::kv::dragonfly_kv::DragonflyKV;
 
-            
             KVStoreImpl::Dragonfly(
                 DragonflyKV::new()
                     .await
