@@ -206,6 +206,19 @@ async fn generate_access_token(
             error_description: format!("unknown principal {user_principal}"),
         })?;
 
+    // let identity_jwk = ctx
+    //     .dragonfly_kv_store
+    //     .read(user_principal.to_text())
+    //     .await
+    //     .map_err(|e| TokenGrantError {
+    //         error: TokenGrantErrorKind::ServerError,
+    //         error_description: e.to_string(),
+    //     })?
+    //     .ok_or_else(|| TokenGrantError {
+    //         error: TokenGrantErrorKind::ServerError,
+    //         error_description: format!("unknown principal {user_principal}"),
+    //     })?;
+
     let sk = k256::SecretKey::from_jwk_str(&identity_jwk).map_err(|_| TokenGrantError {
         error: TokenGrantErrorKind::ServerError,
         error_description: "invalid identity in store?!".into(),
@@ -362,13 +375,28 @@ async fn client_credentials_grant_for_backend(
             error_description: "Invalid principal in KV".to_string(),
         })?;
 
+    // let princ_res = ctx
+    //     .dragonfly_kv_store
+    //     .read(internal_key.clone())
+    //     .await
+    //     .map_err(|e| TokenGrantError {
+    //         error: TokenGrantErrorKind::ServerError,
+    //         error_description: e.to_string(),
+    //     })?
+    //     .map(Principal::from_text)
+    //     .transpose()
+    //     .map_err(|_| TokenGrantError {
+    //         error: TokenGrantErrorKind::ServerError,
+    //         error_description: "Invalid principal in KV".to_string(),
+    //     })?;
+
     if let Some(principal) = princ_res {
         // Set user context for existing backend service principal
         crate::middleware::sentry_user::set_user_context(principal);
         return generate_access_token(ctx, principal, &client_id, None, false, res, None).await;
     }
 
-    let identity = generate_random_identity_and_save(&ctx.kv_store)
+    let identity = generate_random_identity_and_save(&ctx.kv_store, &ctx.dragonfly_kv_store)
         .await
         .map_err(|e| TokenGrantError {
             error: TokenGrantErrorKind::ServerError,
@@ -380,6 +408,14 @@ async fn client_credentials_grant_for_backend(
     crate::middleware::sentry_user::set_user_context(principal);
 
     ctx.kv_store
+        .write(internal_key.clone(), principal.to_text())
+        .await
+        .map_err(|e| TokenGrantError {
+            error: TokenGrantErrorKind::ServerError,
+            error_description: e.to_string(),
+        })?;
+
+     ctx.dragonfly_kv_store
         .write(internal_key, principal.to_text())
         .await
         .map_err(|e| TokenGrantError {
@@ -407,7 +443,7 @@ async fn handle_client_credentials_grant(
         return client_credentials_grant_for_backend(ctx, client_id, validation_res).await;
     }
 
-    let identity = generate_random_identity_and_save(&ctx.kv_store)
+    let identity = generate_random_identity_and_save(&ctx.kv_store, &ctx.dragonfly_kv_store)
         .await
         .map_err(|e| TokenGrantError {
             error: TokenGrantErrorKind::ServerError,

@@ -22,7 +22,7 @@ use crate::{
     error::AuthErrorKind,
     kv::{KVStore, KVStoreImpl},
     oauth::{
-        jwt::generate::generate_code_grant_jwt, AuthLoginHint, AuthQuery, SupportedOAuthProviders,
+        AuthLoginHint, AuthQuery, SupportedOAuthProviders, jwt::generate::generate_code_grant_jwt
     },
     oauth_provider::OAuthProvider,
     utils::identity::generate_random_identity_and_save,
@@ -131,6 +131,7 @@ fn principal_lookup_key(provider: SupportedOAuthProviders, sub_id: &str) -> Stri
 async fn try_extract_principal_from_oauth_sub(
     provider: SupportedOAuthProviders,
     kv: &KVStoreImpl,
+    dragonfly_kv: &KVStoreImpl,
     sub_id: &str,
     email: Option<&str>,
 ) -> Result<Option<String>, AuthErrorKind> {
@@ -139,9 +140,17 @@ async fn try_extract_principal_from_oauth_sub(
         log::debug!("No principal found for {provider} : {email:?}");
         return Ok(None);
     };
+    // let Some(principal_str) = dragonfly_kv.read(key).await.map_err(AuthErrorKind::unexpected)? else {
+    //     log::debug!("No principal found for {provider} : {email:?}");
+    //     return Ok(None);
+    // };
 
     log::debug!("Found principal {principal_str} for {provider} : {email:?}");
 
+    // if dragonfly_kv
+    //     .has_key(principal_str.clone())
+    //     .await
+    //     .map_err(AuthErrorKind::unexpected)?
     if kv
         .has_key(principal_str.clone())
         .await
@@ -168,6 +177,7 @@ async fn try_extract_principal_from_oauth_sub(
 async fn principal_from_login_hint_or_generate_and_save(
     provider: SupportedOAuthProviders,
     kv: &KVStoreImpl,
+    dragonfly_kv: &KVStoreImpl,
     sub_id: &str,
     login_hint: Option<AuthLoginHint>,
     email: Option<&str>,
@@ -187,13 +197,20 @@ async fn principal_from_login_hint_or_generate_and_save(
         log::debug!(
             "No login hint provided, generating new principal for provider {provider} for email {email:?}"
         );
-        let identity = generate_random_identity_and_save(kv)
+        let identity = generate_random_identity_and_save(kv, dragonfly_kv)
             .await
             .map_err(|_| AuthErrorKind::unexpected("failed to generate id"))?;
         identity.sender().unwrap()
     };
 
     kv.write(
+        principal_lookup_key(provider, sub_id),
+        user_principal.to_text(),
+    )
+    .await
+    .map_err(|_| AuthErrorKind::unexpected("failed to associated id with oauth"))?;
+    
+    dragonfly_kv.write(
         principal_lookup_key(provider, sub_id),
         user_principal.to_text(),
     )
@@ -235,7 +252,7 @@ async fn generate_oauth_login_code(
     let email = claims.email().map(|e| String::from(e.clone()));
 
     let maybe_principal =
-        try_extract_principal_from_oauth_sub(provider, &ctx.kv_store, sub_id, email.as_deref())
+        try_extract_principal_from_oauth_sub(provider, &ctx.kv_store, &ctx.dragonfly_kv_store, sub_id, email.as_deref())
             .await
             .map_err(AuthErrorKind::unexpected)?;
     let principal = if let Some(principal_str) = maybe_principal {
@@ -245,6 +262,7 @@ async fn generate_oauth_login_code(
         principal_from_login_hint_or_generate_and_save(
             provider,
             &ctx.kv_store,
+            &ctx.dragonfly_kv_store,
             sub_id,
             query.login_hint.clone(),
             email.as_deref(),
