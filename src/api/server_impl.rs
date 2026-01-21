@@ -206,19 +206,6 @@ async fn generate_access_token(
             error_description: format!("unknown principal {user_principal}"),
         })?;
 
-    // let identity_jwk = ctx
-    //     .dragonfly_kv_store
-    //     .read(user_principal.to_text())
-    //     .await
-    //     .map_err(|e| TokenGrantError {
-    //         error: TokenGrantErrorKind::ServerError,
-    //         error_description: e.to_string(),
-    //     })?
-    //     .ok_or_else(|| TokenGrantError {
-    //         error: TokenGrantErrorKind::ServerError,
-    //         error_description: format!("unknown principal {user_principal}"),
-    //     })?;
-
     let sk = k256::SecretKey::from_jwk_str(&identity_jwk).map_err(|_| TokenGrantError {
         error: TokenGrantErrorKind::ServerError,
         error_description: "invalid identity in store?!".into(),
@@ -374,21 +361,6 @@ async fn client_credentials_grant_for_backend(
             error: TokenGrantErrorKind::ServerError,
             error_description: "Invalid principal in KV".to_string(),
         })?;
-
-    // let princ_res = ctx
-    //     .dragonfly_kv_store
-    //     .read(internal_key.clone())
-    //     .await
-    //     .map_err(|e| TokenGrantError {
-    //         error: TokenGrantErrorKind::ServerError,
-    //         error_description: e.to_string(),
-    //     })?
-    //     .map(Principal::from_text)
-    //     .transpose()
-    //     .map_err(|_| TokenGrantError {
-    //         error: TokenGrantErrorKind::ServerError,
-    //         error_description: "Invalid principal in KV".to_string(),
-    //     })?;
 
     if let Some(principal) = princ_res {
         // Set user context for existing backend service principal

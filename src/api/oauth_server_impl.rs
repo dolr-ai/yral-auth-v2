@@ -140,17 +140,9 @@ async fn try_extract_principal_from_oauth_sub(
         log::debug!("No principal found for {provider} : {email:?}");
         return Ok(None);
     };
-    // let Some(principal_str) = dragonfly_kv.read(key).await.map_err(AuthErrorKind::unexpected)? else {
-    //     log::debug!("No principal found for {provider} : {email:?}");
-    //     return Ok(None);
-    // };
 
     log::debug!("Found principal {principal_str} for {provider} : {email:?}");
 
-    // if dragonfly_kv
-    //     .has_key(principal_str.clone())
-    //     .await
-    //     .map_err(AuthErrorKind::unexpected)?
     if kv
         .has_key(principal_str.clone())
         .await
