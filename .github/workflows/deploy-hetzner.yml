@@ -184,11 +184,11 @@ jobs:
             APPLE_AUTH_KEY_PEM='${{ secrets.APPLE_AUTH_KEY_PEM }}' \
             FLY_API_TOKEN='${{ secrets.HETZNER_FLY_API_TOKEN }}' \
             REDIS_PASSWORD='${{ steps.redis.outputs.password }}' \
-            DRAGONFLY_PASSWORD='$DRAGONFLY_PASSWORD' \
-            DRAGONFLY_HOSTS='$DRAGONFLY_HOSTS' \
-            DRAGONFLY_CA_CERT='$DRAGONFLY_CA_CERT' \
-            DRAGONFLY_CLIENT_CERT='$DRAGONFLY_CLIENT_CERT' \
-            DRAGONFLY_CLIENT_KEY='$DRAGONFLY_CLIENT_KEY' \
+            DRAGONFLY_PASSWORD='${{ secrets.DRAGONFLY_PASSWORD }}' \
+            DRAGONFLY_HOSTS='${{ vars.DRAGONFLY_HOSTS }}' \
+            DRAGONFLY_CA_CERT='${{ secrets.DRAGONFLY_CA_CERT }}' \
+            DRAGONFLY_CLIENT_CERT='${{ secrets.DRAGONFLY_CLIENT_CERT }}' \
+            DRAGONFLY_CLIENT_KEY='${{ secrets.DRAGONFLY_CLIENT_KEY }}' \
             docker compose up -d
 
             echo 'Waiting for services to start...'
