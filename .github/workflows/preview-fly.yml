@@ -54,7 +54,6 @@ jobs:
           APP_NAME="pr-${{ github.event.number }}-${{ github.repository_owner }}-yral-auth-v2"
           flyctl secrets set \
             COOKIE_KEY="$COOKIE_KEY" \
-            REDIS_URL="$REDIS_URL" \
             GOOGLE_CLIENT_SECRET="$GOOGLE_CLIENT_SECRET" \
             JWT_EC_PEM="$JWT_EC_PEM" \
             CLIENT_JWT_ED_PEM="$CLIENT_JWT_ED_PEM" \
@@ -70,7 +69,6 @@ jobs:
           flyctl deploy --app "$APP_NAME"
         env:
           COOKIE_KEY: ${{ secrets.AUTH_SESSION_COOKIE_SIGNING_SECRET_KEY }}
-          REDIS_URL: ${{ secrets.AUTH_FLY_IO_UPSTASH_REDIS_DATABASE_CONNECTION_STRING }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_SIGNING_OAUTH_CLIENT_CREDENTIAL_CLIENT_SECRET }}
           JWT_EC_PEM: ${{ secrets.AUTH_JWT_ES256_SIGNING_SECRET_KEY_PEM }}
           CLIENT_JWT_ED_PEM: ${{ secrets.CLIENT_JWT_ED_PEM }}

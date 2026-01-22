@@ -30,7 +30,6 @@ jobs:
       - name: Set secret tokens
         run: |
           flyctl secrets set COOKIE_KEY="$COOKIE_KEY" --app "yral-auth-v2" --stage
-          flyctl secrets set REDIS_URL="$REDIS_URL" --app "yral-auth-v2" --stage
           flyctl secrets set GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET --app "yral-auth-v2" --stage
           flyctl secrets set JWT_EC_PEM="$JWT_EC_PEM" --app "yral-auth-v2" --stage
           flyctl secrets set CLIENT_JWT_ED_PEM="$CLIENT_JWT_ED_PEM" --app "yral-auth-v2" --stage
@@ -38,13 +37,12 @@ jobs:
           flyctl secrets set WHATSAPP_API_KEY="$WHATSAPP_API_KEY" --app "yral-auth-v2" --stage
           flyctl secrets set DRAGONFLY_PASSWORD="$DRAGONFLY_PASSWORD" --app "yral-auth-v2" --stage
           flyctl secrets set DRAGONFLY_HOSTS="$DRAGONFLY_HOSTS" --app "yral-auth-v2" --stage
-          flyctl secrets set DRAGONFLY_CA_CERT="$DRAGONFLY_CA_CERT" --app "yral-auth-v2" --stage
-          flyctl secrets set DRAGONFLY_CLIENT_CERT="$DRAGONFLY_CLIENT_CERT" --app "yral-auth-v2" --stage
-          flyctl secrets set DRAGONFLY_CLIENT_KEY="$DRAGONFLY_CLIENT_KEY" --app "yral-auth-v2" --stage
+          printf '%s' "$DRAGONFLY_CA_CERT" | flyctl secrets set DRAGONFLY_CA_CERT=- --app "yral-auth-v2" --stage
+          printf '%s' "$DRAGONFLY_CLIENT_CERT" | flyctl secrets set DRAGONFLY_CLIENT_CERT=- --app "yral-auth-v2" --stage
+          printf '%s' "$DRAGONFLY_CLIENT_KEY" | flyctl secrets set DRAGONFLY_CLIENT_KEY=- --app "yral-auth-v2" --stage
         env:
           FLY_API_TOKEN: ${{ secrets.YRAL_AUTH_V2_FLY_IO_GITHUB_ACTION }}
           COOKIE_KEY: ${{ secrets.AUTH_SESSION_COOKIE_SIGNING_SECRET_KEY }}
-          REDIS_URL: ${{ secrets.AUTH_FLY_IO_UPSTASH_REDIS_DATABASE_CONNECTION_STRING }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_SIGNING_OAUTH_CLIENT_CREDENTIAL_CLIENT_SECRET }}
           JWT_EC_PEM: ${{ secrets.AUTH_JWT_ES256_SIGNING_SECRET_KEY_PEM }}
           CLIENT_JWT_ED_PEM: ${{ secrets.CLIENT_JWT_ED_PEM }}
