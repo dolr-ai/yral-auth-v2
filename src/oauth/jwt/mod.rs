@@ -48,8 +48,8 @@ pub struct IdTokenClaims {
     ext_delegated_identity: DelegatedIdentityWire,
     #[serde(skip_serializing_if = "Option::is_none")]
     email: Option<String>,
-    #[serde(skip_serializing_if = "Vec::is_empty", default)]
-    ext_bot_delegated_identities: Vec<DelegatedIdentityWire>,
+    #[serde(default)]
+    ext_ai_account_delegated_identities: Vec<DelegatedIdentityWire>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

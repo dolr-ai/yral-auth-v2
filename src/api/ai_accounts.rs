@@ -25,8 +25,8 @@ fn ai_account_key(principal: &Principal, num: u8) -> String {
 }
 
 #[cfg(feature = "ssr")]
-fn bot_reverse_lookup_key(bot_principal: &Principal) -> String {
-    format!("bot:{}", bot_principal.to_text())
+fn ai_account_reverse_lookup_key(ai_account_principal: &Principal) -> String {
+    format!("ai-account:{}", ai_account_principal.to_text())
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -82,8 +82,8 @@ pub async fn create_ai_account(
 
     let main_principal = user_principal;
 
-    let bot_check_key = bot_reverse_lookup_key(&main_principal);
-    if ctx.kv_store.has_key(bot_check_key).await.unwrap_or(false) {
+    let ai_account_check_key = ai_account_reverse_lookup_key(&main_principal);
+    if ctx.kv_store.has_key(ai_account_check_key).await.unwrap_or(false) {
         return Err(ServerFnError::new(
             "AI accounts cannot create other AI accounts",
         ));
@@ -123,8 +123,8 @@ pub async fn create_ai_account(
     }
 
     let ai_identity = Secp256k1Identity::from_private_key(ai_secret.clone());
-    let bot_principal = ai_identity.sender().unwrap();
-    let reverse_key = bot_reverse_lookup_key(&bot_principal);
+    let ai_account_principal = ai_identity.sender().unwrap();
+    let reverse_key = ai_account_reverse_lookup_key(&ai_account_principal);
     if let Err(e) = ctx
         .kv_store
         .write(reverse_key, main_principal.to_text())
