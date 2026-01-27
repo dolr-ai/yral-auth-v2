@@ -26,7 +26,7 @@
                         ];
                         shellHook = ''
                             export PATH="$HOME/.cargo/bin:$PATH"
-                            cargo install wasm-bindgen-cli --version 0.2.106 --locked || true
+                            cargo install wasm-bindgen-cli --version 0.2.108 --locked || true
                         '';
                     };
                 }

@@ -21,6 +21,7 @@ pub fn principal_lookup_key(provider: SupportedOAuthProviders, sub_id: &str) -> 
 pub async fn try_extract_principal_from_oauth_sub(
     provider: SupportedOAuthProviders,
     kv: &KVStoreImpl,
+    _dragonfly_kv: &KVStoreImpl,
     sub_id: &str,
     email: Option<&str>,
 ) -> Result<Option<String>, AuthErrorKind> {
@@ -58,6 +59,7 @@ pub async fn try_extract_principal_from_oauth_sub(
 pub async fn principal_from_login_hint_or_generate_and_save(
     provider: SupportedOAuthProviders,
     kv: &KVStoreImpl,
+    dragonfly_kv: &KVStoreImpl,
     sub_id: &str,
     login_hint: Option<AuthLoginHint>,
     email: Option<&str>,
@@ -77,7 +79,7 @@ pub async fn principal_from_login_hint_or_generate_and_save(
         log::debug!(
             "No login hint provided, generating new principal for provider {provider} for email {email:?}"
         );
-        let identity = generate_random_identity_and_save(kv)
+        let identity = generate_random_identity_and_save(kv, dragonfly_kv)
             .await
             .map_err(|_| AuthErrorKind::unexpected("failed to generate id"))?;
         identity.sender().unwrap()
@@ -89,6 +91,14 @@ pub async fn principal_from_login_hint_or_generate_and_save(
     )
     .await
     .map_err(|_| AuthErrorKind::unexpected("failed to associated id with oauth"))?;
+
+    dragonfly_kv
+        .write(
+            principal_lookup_key(provider, sub_id),
+            user_principal.to_text(),
+        )
+        .await
+        .map_err(|_| AuthErrorKind::unexpected("failed to associated id with oauth"))?;
 
     Ok(user_principal)
 }

@@ -2,10 +2,9 @@ name: Deploy to Hetzner Bare Metal
 
 on:
   workflow_dispatch:
-  # Temporarily disabled - using Fly.io for now
-  # push:
-  #   branches:
-  #     - main
+  push:
+    branches:
+      - main
 
 concurrency:
   group: deploy-hetzner-${{ github.ref }}
@@ -184,6 +183,11 @@ jobs:
             APPLE_AUTH_KEY_PEM='${{ secrets.APPLE_AUTH_KEY_PEM }}' \
             FLY_API_TOKEN='${{ secrets.HETZNER_FLY_API_TOKEN }}' \
             REDIS_PASSWORD='${{ steps.redis.outputs.password }}' \
+            DRAGONFLY_PASSWORD='${{ secrets.DRAGONFLY_PASSWORD }}' \
+            DRAGONFLY_HOSTS='${{ vars.DRAGONFLY_HOSTS }}' \
+            DRAGONFLY_CA_CERT='${{ secrets.DRAGONFLY_CA_CERT }}' \
+            DRAGONFLY_CLIENT_CERT='${{ secrets.DRAGONFLY_CLIENT_CERT }}' \
+            DRAGONFLY_CLIENT_KEY='${{ secrets.DRAGONFLY_CLIENT_KEY }}' \
             docker compose up -d
 
             echo 'Waiting for services to start...'

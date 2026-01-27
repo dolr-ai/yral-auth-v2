@@ -139,6 +139,7 @@ pub struct ServerCtx {
     pub cookie_key: axum_extra::extract::cookie::Key,
     pub jwk_pairs: JwkPairs,
     pub kv_store: KVStoreImpl,
+    pub dragonfly_kv_store: KVStoreImpl,
     pub validator: ClientIdValidatorImpl,
     #[cfg(feature = "phone-auth")]
     pub message_delivery_service: Box<dyn MessageDeliveryService>,
@@ -314,6 +315,24 @@ impl ServerCtx {
         }
     }
 
+    pub async fn init_dragonfly_kv_store() -> KVStoreImpl {
+        #[cfg(not(feature = "redis-kv"))]
+        {
+            use crate::kv::redb_kv::ReDBKV;
+            KVStoreImpl::ReDB(ReDBKV::new().unwrap())
+        }
+        #[cfg(feature = "redis-kv")]
+        {
+            use crate::kv::dragonfly_kv::DragonflyKV;
+
+            KVStoreImpl::Dragonfly(
+                DragonflyKV::new()
+                    .await
+                    .expect("Failed to initialize RedisKV"),
+            )
+        }
+    }
+
     pub async fn new() -> Self {
         let oauth_http_client = reqwest::ClientBuilder::new()
             // Following redirects opens the client up to SSRF vulnerabilities.
@@ -332,6 +351,7 @@ impl ServerCtx {
         let cookie_key = Self::init_cookie_key();
 
         let kv_store = Self::init_kv_store().await;
+        let dragonfly_kv_store = Self::init_dragonfly_kv_store().await;
 
         #[cfg(feature = "phone-auth")]
         {
@@ -352,6 +372,7 @@ impl ServerCtx {
                 cookie_key,
                 jwk_pairs: JwkPairs::default(),
                 kv_store,
+                dragonfly_kv_store,
                 validator: ClientIdValidatorImpl::Const(Default::default()),
                 message_delivery_service,
             }
