@@ -83,7 +83,12 @@ pub async fn create_ai_account(
     let main_principal = user_principal;
 
     let ai_account_check_key = ai_account_reverse_lookup_key(&main_principal);
-    if ctx.kv_store.has_key(ai_account_check_key).await.unwrap_or(false) {
+    if ctx
+        .kv_store
+        .has_key(ai_account_check_key)
+        .await
+        .unwrap_or(false)
+    {
         return Err(ServerFnError::new(
             "AI accounts cannot create other AI accounts",
         ));
