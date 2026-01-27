@@ -10,6 +10,7 @@ services:
       JWT_EC_PEM: ${JWT_EC_PEM}
       CLIENT_JWT_ED_PEM: ${CLIENT_JWT_ED_PEM}
       APPLE_AUTH_KEY_PEM: ${APPLE_AUTH_KEY_PEM}
+      WHATSAPP_API_KEY: ${WHATSAPP_API_KEY}
       # Public environment variables (non-sensitive)
       PORT: "8080"
       GOOGLE_CLIENT_ID: 804814798298-taifmq3k6olk9bjr1cqb9gfnp1mssqqb.apps.googleusercontent.com

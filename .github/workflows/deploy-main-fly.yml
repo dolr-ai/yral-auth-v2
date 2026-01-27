@@ -37,9 +37,9 @@ jobs:
           flyctl secrets set WHATSAPP_API_KEY="$WHATSAPP_API_KEY" --app "yral-auth-v2" --stage
           flyctl secrets set DRAGONFLY_PASSWORD="$DRAGONFLY_PASSWORD" --app "yral-auth-v2" --stage
           flyctl secrets set DRAGONFLY_HOSTS="$DRAGONFLY_HOSTS" --app "yral-auth-v2" --stage
-          printf '%s' "$DRAGONFLY_CA_CERT" | flyctl secrets set DRAGONFLY_CA_CERT=- --app "yral-auth-v2" --stage
-          printf '%s' "$DRAGONFLY_CLIENT_CERT" | flyctl secrets set DRAGONFLY_CLIENT_CERT=- --app "yral-auth-v2" --stage
-          printf '%s' "$DRAGONFLY_CLIENT_KEY" | flyctl secrets set DRAGONFLY_CLIENT_KEY=- --app "yral-auth-v2" --stage
+          flyctl secrets set DRAGONFLY_CA_CERT="$DRAGONFLY_CA_CERT" --app "yral-auth-v2" --stage
+          flyctl secrets set DRAGONFLY_CLIENT_CERT="$DRAGONFLY_CLIENT_CERT" --app "yral-auth-v2" --stage
+          flyctl secrets set DRAGONFLY_CLIENT_KEY="$DRAGONFLY_CLIENT_KEY" --app "yral-auth-v2" --stage
         env:
           FLY_API_TOKEN: ${{ secrets.YRAL_AUTH_V2_FLY_IO_GITHUB_ACTION }}
           COOKIE_KEY: ${{ secrets.AUTH_SESSION_COOKIE_SIGNING_SECRET_KEY }}

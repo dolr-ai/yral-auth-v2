@@ -353,7 +353,7 @@ impl ServerCtx {
                 server_url,
                 cookie_key,
                 jwk_pairs: JwkPairs::default(),
-                kv_store,
+                kv_store, //dragonfly redis kv store
                 validator: ClientIdValidatorImpl::Const(Default::default()),
                 message_delivery_service,
             }
