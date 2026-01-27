@@ -29,7 +29,7 @@ jobs:
           components: "clippy,rustfmt"
 
       - name: Install wasm-bindgen-cli
-        run: cargo install wasm-bindgen-cli --version 0.2.106
+        run: cargo install wasm-bindgen-cli --version 0.2.108
 
       - uses: cargo-bins/cargo-binstall@main
       - name: cargo-leptos setup
