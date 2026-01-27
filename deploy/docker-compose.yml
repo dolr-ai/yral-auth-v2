@@ -23,6 +23,7 @@ services:
       JWT_EC_PEM: ${JWT_EC_PEM}
       CLIENT_JWT_ED_PEM: ${CLIENT_JWT_ED_PEM}
       APPLE_AUTH_KEY_PEM: ${APPLE_AUTH_KEY_PEM}
+      WHATSAPP_API_KEY: ${WHATSAPP_API_KEY}
       REDIS_URL: redis://default:${REDIS_PASSWORD}@fly-redis-proxy:16379
       # Public environment variables (non-sensitive)
       PORT: "8080"

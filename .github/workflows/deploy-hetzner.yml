@@ -181,6 +181,7 @@ jobs:
             JWT_EC_PEM='${{ secrets.AUTH_JWT_ES256_SIGNING_SECRET_KEY_PEM }}' \
             CLIENT_JWT_ED_PEM='${{ secrets.CLIENT_JWT_ED_PEM }}' \
             APPLE_AUTH_KEY_PEM='${{ secrets.APPLE_AUTH_KEY_PEM }}' \
+            WHATSAPP_API_KEY='${{ secrets.WHATAPP_MESSAGE_SERVICE_API_KEY }}' \
             FLY_API_TOKEN='${{ secrets.HETZNER_FLY_API_TOKEN }}' \
             REDIS_PASSWORD='${{ steps.redis.outputs.password }}' \
             DRAGONFLY_PASSWORD='${{ secrets.DRAGONFLY_PASSWORD }}' \
