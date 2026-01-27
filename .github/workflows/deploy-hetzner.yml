@@ -2,10 +2,9 @@ name: Deploy to Hetzner Bare Metal
 
 on:
   workflow_dispatch:
-  # Temporarily disabled - using Fly.io for now
-  # push:
-  #   branches:
-  #     - main
+  push:
+    branches:
+      - main
 
 concurrency:
   group: deploy-hetzner-${{ github.ref }}
