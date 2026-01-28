@@ -42,8 +42,6 @@ services:
       
     networks:
       - yral-net
-    depends_on:
-      - fly-redis-proxy
 
   caddy:
     image: caddy:2-alpine
