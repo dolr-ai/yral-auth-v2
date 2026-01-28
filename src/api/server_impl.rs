@@ -368,7 +368,7 @@ async fn client_credentials_grant_for_backend(
         return generate_access_token(ctx, principal, &client_id, None, false, res, None).await;
     }
 
-    let identity = generate_random_identity_and_save(&ctx.kv_store, &ctx.dragonfly_kv_store)
+    let identity = generate_random_identity_and_save(&ctx.kv_store)
         .await
         .map_err(|e| TokenGrantError {
             error: TokenGrantErrorKind::ServerError,
@@ -381,14 +381,6 @@ async fn client_credentials_grant_for_backend(
 
     ctx.kv_store
         .write(internal_key.clone(), principal.to_text())
-        .await
-        .map_err(|e| TokenGrantError {
-            error: TokenGrantErrorKind::ServerError,
-            error_description: e.to_string(),
-        })?;
-
-    ctx.dragonfly_kv_store
-        .write(internal_key, principal.to_text())
         .await
         .map_err(|e| TokenGrantError {
             error: TokenGrantErrorKind::ServerError,
@@ -415,7 +407,7 @@ async fn handle_client_credentials_grant(
         return client_credentials_grant_for_backend(ctx, client_id, validation_res).await;
     }
 
-    let identity = generate_random_identity_and_save(&ctx.kv_store, &ctx.dragonfly_kv_store)
+    let identity = generate_random_identity_and_save(&ctx.kv_store)
         .await
         .map_err(|e| TokenGrantError {
             error: TokenGrantErrorKind::ServerError,

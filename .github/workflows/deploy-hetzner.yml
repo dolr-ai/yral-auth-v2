@@ -13,7 +13,6 @@ concurrency:
 env:
   DOCKER_REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
-  PROXY_IMAGE_NAME: ${{ github.repository_owner }}/fly-redis-proxy
 
 jobs:
   build_check:
@@ -63,15 +62,6 @@ jobs:
             type=sha,format=long,prefix=
             type=raw,value=latest
 
-      - name: Extract metadata for fly-redis-proxy
-        id: meta-proxy
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.DOCKER_REGISTRY }}/${{ env.PROXY_IMAGE_NAME }}
-          tags: |
-            type=sha,format=long,prefix=
-            type=raw,value=latest
-
       - name: Build and push yral-auth-v2 image
         uses: docker/build-push-action@v5
         with:
@@ -80,17 +70,6 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Build and push fly-redis-proxy image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./deploy/fly-redis-proxy
-          file: ./deploy/fly-redis-proxy/Dockerfile
-          push: true
-          tags: ${{ steps.meta-proxy.outputs.tags }}
-          labels: ${{ steps.meta-proxy.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -116,36 +95,6 @@ jobs:
         run: |
           ssh -o ConnectTimeout=10 root@138.201.196.246 "echo 'Server connection successful'"
 
-      - name: Install Fly CLI
-        uses: superfly/flyctl-actions/setup-flyctl@master
-
-      - name: Fetch Redis password from Fly
-        id: redis
-        env:
-          FLY_API_TOKEN: ${{ secrets.HETZNER_FLY_API_TOKEN }}
-        run: |
-          # Get Redis status and extract password from Private URL
-          OUTPUT=$(flyctl redis status yral-metadata-auth 2>&1)
-          REDIS_URL=$(echo "$OUTPUT" | grep "Private URL" | awk '{print $NF}')
-
-          # Extract password first, then mask it immediately
-          REDIS_PASSWORD=$(echo "$REDIS_URL" | sed -n 's|redis://default:\([^@]*\)@.*|\1|p')
-          if [ -n "$REDIS_PASSWORD" ]; then
-            echo "::add-mask::$REDIS_PASSWORD"
-            echo "::add-mask::$REDIS_URL"
-          fi
-
-          if [ -z "$REDIS_URL" ]; then
-            echo "Error: Could not fetch Redis URL from flyctl redis status"
-            exit 1
-          fi
-          if [ -z "$REDIS_PASSWORD" ]; then
-            echo "Error: Could not extract Redis password from URL"
-            exit 1
-          fi
-          echo "password=$REDIS_PASSWORD" >> $GITHUB_OUTPUT
-          echo "Redis password fetched successfully"
-
       - name: Sync deployment files to server
         run: |
           rsync -avz --delete \
@@ -165,7 +114,6 @@ jobs:
 
             echo 'Pulling latest images...'
             APP_IMAGE=ghcr.io/${{ github.repository }} \
-            PROXY_IMAGE=ghcr.io/${{ github.repository_owner }}/fly-redis-proxy \
             IMAGE_TAG=${{ github.sha }} \
             docker compose pull
 
@@ -174,7 +122,6 @@ jobs:
 
             echo 'Starting services...'
             APP_IMAGE=ghcr.io/${{ github.repository }} \
-            PROXY_IMAGE=ghcr.io/${{ github.repository_owner }}/fly-redis-proxy \
             IMAGE_TAG=${{ github.sha }} \
             COOKIE_KEY='${{ secrets.AUTH_SESSION_COOKIE_SIGNING_SECRET_KEY }}' \
             GOOGLE_CLIENT_SECRET='${{ secrets.GOOGLE_SIGNING_OAUTH_CLIENT_CREDENTIAL_CLIENT_SECRET }}' \
@@ -218,6 +165,5 @@ jobs:
           echo "- **Deployment Method**: Docker Compose" >> $GITHUB_STEP_SUMMARY
           echo "- **Images**:" >> $GITHUB_STEP_SUMMARY
           echo "  - ghcr.io/${{ github.repository }}:${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
-          echo "  - ghcr.io/${{ github.repository_owner }}/fly-redis-proxy:${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Services**: fly-redis-proxy, yral-auth, caddy" >> $GITHUB_STEP_SUMMARY
+          echo "- **Services**: yral-auth, caddy" >> $GITHUB_STEP_SUMMARY
           echo "- **Secrets**: Injected via environment variables at runtime" >> $GITHUB_STEP_SUMMARY

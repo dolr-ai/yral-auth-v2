@@ -160,7 +160,6 @@ pub async fn verify_phone_one_time_passcode(
         try_extract_principal_from_oauth_sub(
             provider,
             &server_context.kv_store,
-            &server_context.dragonfly_kv_store,
             &verify_request.phone_number,
             None,
         )
@@ -172,7 +171,6 @@ pub async fn verify_phone_one_time_passcode(
         let user_principal = principal_from_login_hint_or_generate_and_save(
             provider,
             &server_context.kv_store,
-            &server_context.dragonfly_kv_store,
             &verify_request.phone_number,
             auth_client_query.login_hint.clone(),
             None,
