@@ -537,34 +537,36 @@ const AUTH_FIELD: &str = "auth";
 
 impl KVStore for DragonflyKV {
     async fn read(&self, key: String) -> Result<Option<String>, KVError> {
-        let value = self.0.execute_with_retry(|mut conn|
-        {
-            let key = key.clone();
-            async move {
-                conn.hget(key, AUTH_FIELD).await
-            }
-        }).await?;
+        let value = self
+            .0
+            .execute_with_retry(|mut conn| {
+                let key = key.clone();
+                async move { conn.hget(key, AUTH_FIELD).await }
+            })
+            .await?;
         Ok(value)
     }
 
     async fn write(&self, key: String, value: String) -> Result<(), KVError> {
-        let result:() =  self.0.execute_with_retry(|mut conn| {
-            let key = key.clone();
-            let value = value.clone();
-            async move {
-                conn.hset::<_, _, _, ()>(key, AUTH_FIELD, value).await
-            }
-        }).await?;
+        let result: () = self
+            .0
+            .execute_with_retry(|mut conn| {
+                let key = key.clone();
+                let value = value.clone();
+                async move { conn.hset::<_, _, _, ()>(key, AUTH_FIELD, value).await }
+            })
+            .await?;
         Ok(result)
     }
 
     async fn has_key(&self, key: String) -> Result<bool, KVError> {
-        let exists: bool = self.0.execute_with_retry(|mut conn| {
-            let key = key.clone();
-            async move {
-                conn.exists(key).await
-            }
-        }).await?;
+        let exists: bool = self
+            .0
+            .execute_with_retry(|mut conn| {
+                let key = key.clone();
+                async move { conn.exists(key).await }
+            })
+            .await?;
         Ok(exists)
     }
 }
