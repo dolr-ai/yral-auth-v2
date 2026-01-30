@@ -139,7 +139,6 @@ pub struct ServerCtx {
     pub cookie_key: axum_extra::extract::cookie::Key,
     pub jwk_pairs: JwkPairs,
     pub kv_store: KVStoreImpl,
-    pub dragonfly_kv_store: KVStoreImpl,
     pub validator: ClientIdValidatorImpl,
     #[cfg(feature = "phone-auth")]
     pub message_delivery_service: Box<dyn MessageDeliveryService>,
@@ -305,26 +304,9 @@ impl ServerCtx {
         }
         #[cfg(feature = "redis-kv")]
         {
-            use crate::kv::redis_kv::RedisKV;
-            let redis_url = env::var("REDIS_URL").expect("`REDIS_URL` is required!");
-            KVStoreImpl::Redis(
-                RedisKV::new(&redis_url)
-                    .await
-                    .expect("Failed to initialize RedisKV"),
-            )
-        }
-    }
-
-    pub async fn init_dragonfly_kv_store() -> KVStoreImpl {
-        #[cfg(not(feature = "redis-kv"))]
-        {
-            use crate::kv::redb_kv::ReDBKV;
-            KVStoreImpl::ReDB(ReDBKV::new().unwrap())
-        }
-        #[cfg(feature = "redis-kv")]
-        {
             use crate::kv::dragonfly_kv::DragonflyKV;
 
+            log::info!("Initializing Dragonfly KV store");
             KVStoreImpl::Dragonfly(
                 DragonflyKV::new()
                     .await
@@ -350,8 +332,8 @@ impl ServerCtx {
 
         let cookie_key = Self::init_cookie_key();
 
+        //dragonfly redis kv store
         let kv_store = Self::init_kv_store().await;
-        let dragonfly_kv_store = Self::init_dragonfly_kv_store().await;
 
         #[cfg(feature = "phone-auth")]
         {
@@ -371,8 +353,7 @@ impl ServerCtx {
                 server_url,
                 cookie_key,
                 jwk_pairs: JwkPairs::default(),
-                kv_store,
-                dragonfly_kv_store,
+                kv_store, //dragonfly redis kv store
                 validator: ClientIdValidatorImpl::Const(Default::default()),
                 message_delivery_service,
             }
