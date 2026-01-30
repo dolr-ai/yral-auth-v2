@@ -395,7 +395,7 @@ async fn client_credentials_grant_for_backend(
     // Set user context for new backend service principal
     crate::middleware::sentry_user::set_user_context(principal);
 
-    ctx.dragonfly_kv_store
+    ctx.kv_store
         .write(internal_key, principal.to_text())
         .await
         .map_err(|e| TokenGrantError {
