@@ -14,6 +14,7 @@ use web_time::Duration;
 use yral_types::delegated_identity::DelegatedIdentityWire;
 
 use crate::{
+    api::ai_accounts::get_ai_accounts_for_principal,
     context::server::ServerCtx,
     kv::KVStore,
     oauth::{
@@ -147,6 +148,7 @@ fn delegate_identity(from: &impl Identity, max_age: Duration) -> DelegatedIdenti
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn generate_access_token_with_identity(
     ctx: &ServerCtx,
     identity: Secp256k1Identity,
@@ -155,6 +157,7 @@ fn generate_access_token_with_identity(
     is_anonymous: bool,
     res: ValidationRes,
     email: Option<String>,
+    ai_account_delegated_identities: Vec<DelegatedIdentityWire>,
 ) -> TokenGrantRes {
     let delegated_identity = delegate_identity(&identity, res.access_max_age);
     let user_principal = identity.sender().unwrap();
@@ -169,6 +172,7 @@ fn generate_access_token_with_identity(
         is_anonymous,
         res.access_max_age,
         email.clone(),
+        ai_account_delegated_identities,
     );
     let refresh_token = generate_refresh_token_jwt(
         &ctx.jwk_pairs.auth_tokens.encoding_key,
@@ -212,6 +216,17 @@ async fn generate_access_token(
     })?;
     let id = Secp256k1Identity::from_private_key(sk);
 
+    let ai_accounts = get_ai_accounts_for_principal(ctx, user_principal)
+        .await
+        .map_err(|e| TokenGrantError {
+            error: TokenGrantErrorKind::ServerError,
+            error_description: format!("Failed to fetch AI accounts: {}", e),
+        })?;
+    let ai_account_delegated_identities: Vec<DelegatedIdentityWire> = ai_accounts
+        .into_iter()
+        .map(|a| a.delegated_identity)
+        .collect();
+
     let grant = generate_access_token_with_identity(
         ctx,
         id,
@@ -220,6 +235,7 @@ async fn generate_access_token(
         is_anonymous,
         validation_res,
         email,
+        ai_account_delegated_identities,
     );
 
     Ok(grant)
@@ -380,15 +396,23 @@ async fn client_credentials_grant_for_backend(
     crate::middleware::sentry_user::set_user_context(principal);
 
     ctx.kv_store
-        .write(internal_key.clone(), principal.to_text())
+        .write(internal_key, principal.to_text())
         .await
         .map_err(|e| TokenGrantError {
             error: TokenGrantErrorKind::ServerError,
             error_description: e.to_string(),
         })?;
 
-    let grant =
-        generate_access_token_with_identity(ctx, identity, &client_id, None, false, res, None);
+    let grant = generate_access_token_with_identity(
+        ctx,
+        identity,
+        &client_id,
+        None,
+        false,
+        res,
+        None,
+        Vec::new(),
+    );
 
     Ok(grant)
 }
@@ -429,6 +453,7 @@ async fn handle_client_credentials_grant(
         true,
         validation_res,
         None,
+        Vec::new(),
     );
 
     Ok(grant)
