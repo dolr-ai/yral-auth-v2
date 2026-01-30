@@ -1,3 +1,6 @@
+use crate::api::ai_accounts::server_fn::codec::Json;
+#[cfg(feature = "ssr")]
+use crate::{context::server::ServerCtx, kv::KVStore, utils::time::current_epoch};
 use candid::Principal;
 use ic_agent::{
     identity::{Delegation, Secp256k1Identity, SignedDelegation},
@@ -9,9 +12,6 @@ use web_time::Duration;
 use yral_identity::msg_builder::Message;
 use yral_identity::Signature;
 use yral_types::delegated_identity::DelegatedIdentityWire;
-
-#[cfg(feature = "ssr")]
-use crate::{context::server::ServerCtx, kv::KVStore, utils::time::current_epoch};
 
 pub fn ai_account_message() -> yral_identity::msg_builder::Message {
     Message::default().method_name("yral_auth_v2_create_ai_account".into())
@@ -68,7 +68,7 @@ fn create_delegated_identity(
 #[cfg(feature = "ssr")]
 const AI_ACCOUNT_MAX_AGE: Duration = Duration::from_secs(7 * 24 * 60 * 60);
 
-#[server]
+#[server(endpoint = "create_ai_account", input=Json, output=Json)]
 pub async fn create_ai_account(
     user_principal: Principal,
     signature: Signature,
