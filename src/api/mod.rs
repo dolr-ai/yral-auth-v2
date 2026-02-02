@@ -1,3 +1,4 @@
+pub mod ai_accounts;
 pub mod identity_provider;
 pub mod oauth_server_impl;
 #[cfg(feature = "phone-auth")]
