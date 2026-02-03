@@ -9,7 +9,7 @@ use axum_extra::extract::{
 };
 use base64::{prelude::BASE64_URL_SAFE, Engine};
 use candid::Principal;
-use leptos::prelude::{expect_context, ServerFnError};
+use leptos::{prelude::{ServerFnError, expect_context}, server};
 use leptos_axum::{extract_with_state, ResponseOptions};
 use openidconnect::{
     core::CoreAuthenticationFlow, AuthorizationCode, CsrfToken, Nonce, PkceCodeChallenge,
@@ -215,6 +215,7 @@ async fn generate_oauth_login_code(
     pkce_verifier: PkceCodeVerifier,
     provider: SupportedOAuthProviders,
     query: AuthQuery,
+    server_url: String,
 ) -> Result<String, AuthErrorKind> {
     let ctx = expect_server_ctx();
     let oauth_impl = ctx
@@ -223,9 +224,14 @@ async fn generate_oauth_login_code(
         .ok_or_else(|| AuthErrorKind::unexpected(format!("provider unavailable: {provider}")))?;
     let oauth2 = oauth_impl.get_client();
 
+
+    let redirect_uri = RedirectUrl::new(format!("{server_url}/oauth_callback"))
+        .map_err(|e| AuthErrorKind::unexpected(e.to_string()))?;
+
     let token_res = oauth2
         .exchange_code(AuthorizationCode::new(code))
         .map_err(AuthErrorKind::unexpected)?
+        .set_redirect_uri(Cow::Owned(redirect_uri))
         .set_pkce_verifier(pkce_verifier)
         .request_async(&ctx.oauth_http_client)
         .await
@@ -280,6 +286,7 @@ pub async fn perform_oauth_login_impl(
 ) -> Result<String, ServerFnError> {
     let ctx = expect_server_ctx();
     let mut jar: PrivateCookieJar = extract_with_state(&ctx.cookie_key).await?;
+    let server_url = get_server_url_from_request().await?;
 
     let csrf_cookie = jar
         .get(CSRF_TOKEN_COOKIE)
@@ -312,7 +319,7 @@ pub async fn perform_oauth_login_impl(
     let req_state = query.state.clone();
     let mut redirect_uri = query.redirect_uri.clone();
 
-    let res = generate_oauth_login_code(code, pkce_verifier, state.provider, query).await;
+    let res = generate_oauth_login_code(code, pkce_verifier, state.provider, query, server_url).await;
     match res {
         Ok(grant) => redirect_uri
             .query_pairs_mut()
