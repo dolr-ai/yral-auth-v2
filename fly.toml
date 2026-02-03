@@ -18,6 +18,7 @@ MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEoqN3/0RNfrnrnYGxKBgy/qHnmITr
   CLIENT_JWT_PUB_ED_PEM = """-----BEGIN PUBLIC KEY-----
 MCowBQYDK2VwAyEAKpZNfPOONR9AXiaGmHv8AHemm4SNK0uh+mf523ho5KU=
 -----END PUBLIC KEY-----"""
+  SERVER_URL = "https://auth.yral.com"
   APP_ENV = "preview"
 
 [http_service]

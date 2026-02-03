@@ -1,5 +1,4 @@
 use ic_agent::Identity;
-use std::borrow::Cow;
 use web_time::Duration;
 
 use axum::{http::header, response::IntoResponse};
@@ -13,7 +12,7 @@ use leptos::prelude::{expect_context, ServerFnError};
 use leptos_axum::{extract_with_state, ResponseOptions};
 use openidconnect::{
     core::CoreAuthenticationFlow, AuthorizationCode, CsrfToken, Nonce, PkceCodeChallenge,
-    PkceCodeVerifier, RedirectUrl, Scope,
+    PkceCodeVerifier, Scope,
 };
 use serde::{Deserialize, Serialize};
 
@@ -26,7 +25,7 @@ use crate::{
         jwt::generate::generate_code_grant_jwt, AuthLoginHint, AuthQuery, SupportedOAuthProviders,
     },
     oauth_provider::OAuthProvider,
-    utils::{identity::generate_random_identity_and_save, server_url::get_server_url_from_request},
+    utils::identity::generate_random_identity_and_save,
 };
 
 const PKCE_VERIFIER_COOKIE: &str = "oauth-pkce-verifier";
@@ -74,18 +73,12 @@ pub async fn get_oauth_url_impl(
         .map_err(|_| ServerFnError::new("failed to serialize oauth state"))?;
     let oauth_state_b64 = BASE64_URL_SAFE.encode(oauth_state_raw);
 
-    let server_url = get_server_url_from_request().await?;
-
-    let redirect_uri = RedirectUrl::new(format!("{server_url}/oauth_callback"))
-        .map_err(|e| ServerFnError::new(e.to_string()))?;
-
     let authorize_builder = oauth_provider
         .authorize_url(
             CoreAuthenticationFlow::AuthorizationCode,
             move || CsrfToken::new(oauth_state_b64),
             Nonce::new_random,
         )
-        .set_redirect_uri(Cow::Owned(redirect_uri))
         .set_pkce_challenge(pkce_challenge);
 
     #[cfg(feature = "google-oauth")]
@@ -215,7 +208,6 @@ async fn generate_oauth_login_code(
     pkce_verifier: PkceCodeVerifier,
     provider: SupportedOAuthProviders,
     query: AuthQuery,
-    server_url: String,
 ) -> Result<String, AuthErrorKind> {
     let ctx = expect_server_ctx();
     let oauth_impl = ctx
@@ -224,13 +216,9 @@ async fn generate_oauth_login_code(
         .ok_or_else(|| AuthErrorKind::unexpected(format!("provider unavailable: {provider}")))?;
     let oauth2 = oauth_impl.get_client();
 
-    let redirect_uri = RedirectUrl::new(format!("{server_url}/oauth_callback"))
-        .map_err(|e| AuthErrorKind::unexpected(e.to_string()))?;
-
     let token_res = oauth2
         .exchange_code(AuthorizationCode::new(code))
         .map_err(AuthErrorKind::unexpected)?
-        .set_redirect_uri(Cow::Owned(redirect_uri))
         .set_pkce_verifier(pkce_verifier)
         .request_async(&ctx.oauth_http_client)
         .await
@@ -264,14 +252,10 @@ async fn generate_oauth_login_code(
         .await?
     };
 
-    let server_url = get_server_url_from_request()
-        .await
-        .map_err(|e| AuthErrorKind::Unexpected(e.to_string()))?;
-
     let code_grant = generate_code_grant_jwt(
         &ctx.jwk_pairs.auth_tokens.encoding_key,
         principal,
-        &server_url,
+        &ctx.server_url,
         query,
         email,
     );
@@ -285,7 +269,6 @@ pub async fn perform_oauth_login_impl(
 ) -> Result<String, ServerFnError> {
     let ctx = expect_server_ctx();
     let mut jar: PrivateCookieJar = extract_with_state(&ctx.cookie_key).await?;
-    let server_url = get_server_url_from_request().await?;
 
     let csrf_cookie = jar
         .get(CSRF_TOKEN_COOKIE)
@@ -318,8 +301,7 @@ pub async fn perform_oauth_login_impl(
     let req_state = query.state.clone();
     let mut redirect_uri = query.redirect_uri.clone();
 
-    let res =
-        generate_oauth_login_code(code, pkce_verifier, state.provider, query, server_url).await;
+    let res = generate_oauth_login_code(code, pkce_verifier, state.provider, query).await;
     match res {
         Ok(grant) => redirect_uri
             .query_pairs_mut()
