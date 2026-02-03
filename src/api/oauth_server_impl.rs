@@ -1,6 +1,6 @@
 use ic_agent::Identity;
-use web_time::Duration;
 use std::borrow::Cow;
+use web_time::Duration;
 
 use axum::{http::header, response::IntoResponse};
 use axum_extra::extract::{
@@ -9,10 +9,11 @@ use axum_extra::extract::{
 };
 use base64::{prelude::BASE64_URL_SAFE, Engine};
 use candid::Principal;
-use leptos::{prelude::{ServerFnError, expect_context}};
+use leptos::prelude::{expect_context, ServerFnError};
 use leptos_axum::{extract_with_state, ResponseOptions};
 use openidconnect::{
-    AuthorizationCode, CsrfToken, Nonce, PkceCodeChallenge, PkceCodeVerifier, RedirectUrl, Scope, core::CoreAuthenticationFlow
+    core::CoreAuthenticationFlow, AuthorizationCode, CsrfToken, Nonce, PkceCodeChallenge,
+    PkceCodeVerifier, RedirectUrl, Scope,
 };
 use serde::{Deserialize, Serialize};
 
@@ -22,10 +23,10 @@ use crate::{
     error::AuthErrorKind,
     kv::{KVStore, KVStoreImpl},
     oauth::{
-        AuthLoginHint, AuthQuery, SupportedOAuthProviders, jwt::generate::generate_code_grant_jwt
+        jwt::generate::generate_code_grant_jwt, AuthLoginHint, AuthQuery, SupportedOAuthProviders,
     },
     oauth_provider::OAuthProvider,
-    utils::{identity::generate_random_identity_and_save, server_url::{get_server_url_from_request}},
+    utils::{identity::generate_random_identity_and_save, server_url::get_server_url_from_request},
 };
 
 const PKCE_VERIFIER_COOKIE: &str = "oauth-pkce-verifier";
@@ -75,8 +76,8 @@ pub async fn get_oauth_url_impl(
 
     let server_url = get_server_url_from_request().await?;
 
-    let redirect_uri  =  RedirectUrl::new(format!("{server_url}/oauth_callback")).map_err(|e| ServerFnError::new(e.to_string()))?;
-
+    let redirect_uri = RedirectUrl::new(format!("{server_url}/oauth_callback"))
+        .map_err(|e| ServerFnError::new(e.to_string()))?;
 
     let authorize_builder = oauth_provider
         .authorize_url(
@@ -258,7 +259,9 @@ async fn generate_oauth_login_code(
         .await?
     };
 
-    let server_url = get_server_url_from_request().await.map_err(|e|AuthErrorKind::Unexpected(e.to_string()))?;
+    let server_url = get_server_url_from_request()
+        .await
+        .map_err(|e| AuthErrorKind::Unexpected(e.to_string()))?;
 
     let code_grant = generate_code_grant_jwt(
         &ctx.jwk_pairs.auth_tokens.encoding_key,

@@ -17,7 +17,7 @@ use crate::{
     error::AuthErrorKind,
     oauth::{jwt::generate::generate_code_grant_jwt, AuthQuery, SupportedOAuthProviders},
     page::oauth_login::verify_phone_auth::VerifyPhoneOtpRequest,
-    utils::{cookies::set_cookies, time::current_epoch},
+    utils::{cookies::set_cookies, server_url::get_server_url_from_request, time::current_epoch},
 };
 
 pub const OTP_COOKIE_NAME: &str = "otp_token";
@@ -110,6 +110,10 @@ pub async fn verify_phone_one_time_passcode(
     server_context: &Arc<ServerCtx>,
     verify_request: VerifyPhoneOtpRequest,
 ) -> Result<(String, Url), AuthErrorKind> {
+    let server_url = get_server_url_from_request()
+        .await
+        .map_err(|e| AuthErrorKind::Unexpected(e.to_string()))?;
+
     let mut private_cookie_jar: PrivateCookieJar = extract_with_state(&server_context.cookie_key)
         .await
         .map_err(|e| AuthErrorKind::Unexpected(e.to_string()))?;
@@ -185,7 +189,7 @@ pub async fn verify_phone_one_time_passcode(
     let token = generate_code_grant_jwt(
         &server_context.jwk_pairs.auth_tokens.encoding_key,
         user_principal,
-        &server_context.server_url,
+        &server_url,
         auth_client_query,
         None,
     );

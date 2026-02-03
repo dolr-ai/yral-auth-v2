@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 
 use crate::{
-    components::{spinner::Spinner, whatsapp_symbol::WhatsAppSymbol, yral_symbol::YralSymbol},
+    components::{spinner::Spinner, yral_symbol::YralSymbol},
     error::AuthErrorKind,
     oauth::{
         client_validation::{ClientIdValidator, ClientIdValidatorImpl},
@@ -19,6 +19,10 @@ use crate::{
     },
 };
 
+#[cfg(feature = "phone-auth")]
+use crate::components::whatsapp_symbol::WhatsAppSymbol;
+
+#[cfg(feature = "google-oauth")]
 use crate::components::google_symbol::GoogleSymbol;
 
 #[cfg(feature = "apple-oauth")]

@@ -2,11 +2,8 @@ use axum::http::HeaderMap;
 use leptos::prelude::ServerFnError;
 use leptos_axum::extract;
 
-
 pub async fn get_server_url_from_request() -> Result<String, ServerFnError> {
-
     let headers: HeaderMap = extract().await?;
-
 
     let host = headers
         .get("host")

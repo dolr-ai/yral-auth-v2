@@ -261,20 +261,15 @@ impl ServerCtx {
     ) -> HashMap<SupportedOAuthProviders, OAuthProviderImpl> {
         let mut oauth_providers = HashMap::new();
 
-
         // Google OAuth
         #[cfg(feature = "google-oauth")]
-        if let Err(e) =
-            Self::init_google_oauth_client(http_client, &mut oauth_providers).await
-        {
+        if let Err(e) = Self::init_google_oauth_client(http_client, &mut oauth_providers).await {
             log::error!("Failed to initialize Google OAuth: {e}, ignoring");
         }
 
         // Apple OAuth
         #[cfg(feature = "apple-oauth")]
-        if let Err(e) =
-            Self::init_apple_oauth_client(http_client, &mut oauth_providers).await
-        {
+        if let Err(e) = Self::init_apple_oauth_client(http_client, &mut oauth_providers).await {
             log::error!("Failed to initialize Apple OAuth: {e}, ignoring");
         }
 
@@ -313,7 +308,6 @@ impl ServerCtx {
             .redirect(reqwest::redirect::Policy::none())
             .build()
             .expect("Client should build");
-
 
         let oauth_providers = Self::init_oauth_providers(&oauth_http_client).await;
 
