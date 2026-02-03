@@ -9,7 +9,7 @@ use axum_extra::extract::{
 };
 use base64::{prelude::BASE64_URL_SAFE, Engine};
 use candid::Principal;
-use leptos::{prelude::{ServerFnError, expect_context}, server};
+use leptos::prelude::{expect_context, ServerFnError};
 use leptos_axum::{extract_with_state, ResponseOptions};
 use openidconnect::{
     core::CoreAuthenticationFlow, AuthorizationCode, CsrfToken, Nonce, PkceCodeChallenge,
@@ -224,7 +224,6 @@ async fn generate_oauth_login_code(
         .ok_or_else(|| AuthErrorKind::unexpected(format!("provider unavailable: {provider}")))?;
     let oauth2 = oauth_impl.get_client();
 
-
     let redirect_uri = RedirectUrl::new(format!("{server_url}/oauth_callback"))
         .map_err(|e| AuthErrorKind::unexpected(e.to_string()))?;
 
@@ -319,7 +318,8 @@ pub async fn perform_oauth_login_impl(
     let req_state = query.state.clone();
     let mut redirect_uri = query.redirect_uri.clone();
 
-    let res = generate_oauth_login_code(code, pkce_verifier, state.provider, query, server_url).await;
+    let res =
+        generate_oauth_login_code(code, pkce_verifier, state.provider, query, server_url).await;
     match res {
         Ok(grant) => redirect_uri
             .query_pairs_mut()
