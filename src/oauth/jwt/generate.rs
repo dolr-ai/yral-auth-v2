@@ -48,13 +48,13 @@ pub fn generate_access_token_and_id_token_jwt(
     encoding_key: &jsonwebtoken::EncodingKey,
     user_principal: Principal,
     identity: DelegatedIdentityWire,
-    server_url: &str,
     client_id: &str,
     nonce: Option<String>,
     is_anonymous: bool,
     max_age: Duration,
     email: Option<String>,
     ai_account_delegated_identities: Vec<DelegatedIdentityWire>,
+    server_url: &str,
 ) -> (String, String) {
     let iat = current_epoch_secs();
 
@@ -94,12 +94,12 @@ pub fn generate_access_token_and_id_token_jwt(
 pub fn generate_refresh_token_jwt(
     encoding_key: &jsonwebtoken::EncodingKey,
     user_principal: Principal,
-    server_url: &str,
     client_id: &str,
     nonce: Option<String>,
     is_anonymous: bool,
     max_age: Duration,
     email: Option<String>,
+    server_url: &str,
 ) -> String {
     let iat = current_epoch_secs();
 
