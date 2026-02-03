@@ -1,5 +1,6 @@
 use ic_agent::Identity;
 use web_time::Duration;
+use std::borrow::Cow;
 
 use axum::{http::header, response::IntoResponse};
 use axum_extra::extract::{
@@ -8,11 +9,10 @@ use axum_extra::extract::{
 };
 use base64::{prelude::BASE64_URL_SAFE, Engine};
 use candid::Principal;
-use leptos::prelude::{expect_context, ServerFnError};
+use leptos::{prelude::{ServerFnError, expect_context}};
 use leptos_axum::{extract_with_state, ResponseOptions};
 use openidconnect::{
-    core::CoreAuthenticationFlow, AuthorizationCode, CsrfToken, Nonce, PkceCodeChallenge,
-    PkceCodeVerifier, Scope,
+    AuthorizationCode, CsrfToken, Nonce, PkceCodeChallenge, PkceCodeVerifier, RedirectUrl, Scope, core::CoreAuthenticationFlow
 };
 use serde::{Deserialize, Serialize};
 
@@ -22,10 +22,10 @@ use crate::{
     error::AuthErrorKind,
     kv::{KVStore, KVStoreImpl},
     oauth::{
-        jwt::generate::generate_code_grant_jwt, AuthLoginHint, AuthQuery, SupportedOAuthProviders,
+        AuthLoginHint, AuthQuery, SupportedOAuthProviders, jwt::generate::generate_code_grant_jwt
     },
     oauth_provider::OAuthProvider,
-    utils::identity::generate_random_identity_and_save,
+    utils::{identity::generate_random_identity_and_save, server_url::{get_server_url_from_request}},
 };
 
 const PKCE_VERIFIER_COOKIE: &str = "oauth-pkce-verifier";
@@ -73,12 +73,18 @@ pub async fn get_oauth_url_impl(
         .map_err(|_| ServerFnError::new("failed to serialize oauth state"))?;
     let oauth_state_b64 = BASE64_URL_SAFE.encode(oauth_state_raw);
 
+    let server_url = get_server_url_from_request().await?;
+
+    let redirect_uri  =  RedirectUrl::new(format!("{server_url}/oauth_callback")).map_err(|e| ServerFnError::new(e.to_string()))?;
+
+
     let authorize_builder = oauth_provider
         .authorize_url(
             CoreAuthenticationFlow::AuthorizationCode,
             move || CsrfToken::new(oauth_state_b64),
             Nonce::new_random,
         )
+        .set_redirect_uri(Cow::Owned(redirect_uri))
         .set_pkce_challenge(pkce_challenge);
 
     #[cfg(feature = "google-oauth")]
@@ -252,10 +258,12 @@ async fn generate_oauth_login_code(
         .await?
     };
 
+    let server_url = get_server_url_from_request().await.map_err(|e|AuthErrorKind::Unexpected(e.to_string()))?;
+
     let code_grant = generate_code_grant_jwt(
         &ctx.jwk_pairs.auth_tokens.encoding_key,
         principal,
-        &ctx.server_url,
+        &server_url,
         query,
         email,
     );
