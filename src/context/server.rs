@@ -134,7 +134,6 @@ impl Default for JwkPairs {
 
 pub struct ServerCtx {
     pub oauth_http_client: reqwest::Client,
-    pub server_url: String,
     pub oauth_providers: HashMap<SupportedOAuthProviders, OAuthProviderImpl>,
     pub cookie_key: axum_extra::extract::cookie::Key,
     pub jwk_pairs: JwkPairs,
@@ -176,7 +175,6 @@ impl ServerCtx {
     #[cfg(feature = "google-oauth")]
     async fn init_google_oauth_client(
         http_client: &reqwest::Client,
-        redirect_uri: &RedirectUrl,
         oauth_providers: &mut HashMap<SupportedOAuthProviders, OAuthProviderImpl>,
     ) -> Result<(), String> {
         let google_client_secret =
@@ -196,7 +194,6 @@ impl ServerCtx {
             ClientId::new(client_id),
             None,
         )
-        .set_redirect_uri(redirect_uri.clone())
         .set_auth_type(openidconnect::AuthType::RequestBody)
         .set_client_secret(ClientSecret::new(google_client_secret.clone()));
 
@@ -218,7 +215,6 @@ impl ServerCtx {
     #[cfg(feature = "apple-oauth")]
     async fn init_apple_oauth_client(
         http_client: &reqwest::Client,
-        redirect_uri: &RedirectUrl,
         oauth_providers: &mut HashMap<SupportedOAuthProviders, OAuthProviderImpl>,
     ) -> Result<(), String> {
         let apple_team_id = env::var("APPLE_TEAM_ID").expect("`APPLE_TEAM_ID` is required!");
@@ -250,7 +246,6 @@ impl ServerCtx {
 
         let apple_oauth =
             CoreClient::from_provider_metadata(metadata, ClientId::new(client_id), None)
-                .set_redirect_uri(redirect_uri.clone())
                 .set_auth_type(openidconnect::AuthType::RequestBody);
 
         let apple_oauth =
@@ -263,26 +258,18 @@ impl ServerCtx {
 
     async fn init_oauth_providers(
         http_client: &reqwest::Client,
-        server_url: &str,
     ) -> HashMap<SupportedOAuthProviders, OAuthProviderImpl> {
         let mut oauth_providers = HashMap::new();
 
-        let redirect_uri = format!("{server_url}/oauth_callback");
-        let redirect_uri = RedirectUrl::new(redirect_uri).expect("Invalid `SERVER_URL`");
-
         // Google OAuth
         #[cfg(feature = "google-oauth")]
-        if let Err(e) =
-            Self::init_google_oauth_client(http_client, &redirect_uri, &mut oauth_providers).await
-        {
+        if let Err(e) = Self::init_google_oauth_client(http_client, &mut oauth_providers).await {
             log::error!("Failed to initialize Google OAuth: {e}, ignoring");
         }
 
         // Apple OAuth
         #[cfg(feature = "apple-oauth")]
-        if let Err(e) =
-            Self::init_apple_oauth_client(http_client, &redirect_uri, &mut oauth_providers).await
-        {
+        if let Err(e) = Self::init_apple_oauth_client(http_client, &mut oauth_providers).await {
             log::error!("Failed to initialize Apple OAuth: {e}, ignoring");
         }
 
@@ -322,13 +309,7 @@ impl ServerCtx {
             .build()
             .expect("Client should build");
 
-        let server_url = env::var("SERVER_URL").unwrap_or("http://localhost:3000".to_owned());
-        let server_url = server_url
-            .strip_suffix("/")
-            .unwrap_or(&server_url)
-            .to_string();
-
-        let oauth_providers = Self::init_oauth_providers(&oauth_http_client, &server_url).await;
+        let oauth_providers = Self::init_oauth_providers(&oauth_http_client).await;
 
         let cookie_key = Self::init_cookie_key();
 
@@ -350,7 +331,6 @@ impl ServerCtx {
             Self {
                 oauth_http_client,
                 oauth_providers,
-                server_url,
                 cookie_key,
                 jwk_pairs: JwkPairs::default(),
                 kv_store, //dragonfly redis kv store

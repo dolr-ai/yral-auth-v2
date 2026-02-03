@@ -1,4 +1,5 @@
 use axum::{
+    http::HeaderMap,
     response::{IntoResponse, Response},
     Extension, Form, Json,
 };
@@ -26,7 +27,11 @@ use crate::{
         AuthGrantQuery, PartialOIDCConfig, TokenGrantError, TokenGrantErrorKind, TokenGrantRes,
         TokenGrantResult,
     },
-    utils::{identity::generate_random_identity_and_save, time::current_epoch},
+    utils::{
+        identity::generate_random_identity_and_save,
+        server_url::{self, get_server_url_from_headers, get_server_url_from_request},
+        time::current_epoch,
+    },
 };
 
 async fn verify_client_secret(
@@ -67,8 +72,9 @@ pub async fn handle_well_known_jwks(Extension(ctx): Extension<Arc<ServerCtx>>) -
     Json(ctx.jwk_pairs.well_known_jwks.clone()).into_response()
 }
 
-pub async fn handle_oidc_configuration(Extension(ctx): Extension<Arc<ServerCtx>>) -> Response {
-    let jwks_uri = format!("{}/.well-known/jwks.json", ctx.server_url,);
+pub async fn handle_oidc_configuration(headers: HeaderMap) -> Response {
+    let server_url = server_url::get_server_url_from_headers(&headers);
+    let jwks_uri = format!("{}/.well-known/jwks.json", server_url);
 
     Json(PartialOIDCConfig { jwks_uri }).into_response()
 }
@@ -79,8 +85,10 @@ pub async fn healthz() -> Response {
 
 pub async fn handle_oauth_token_grant(
     Extension(ctx): Extension<Arc<ServerCtx>>,
+    headers: HeaderMap,
     Form(req): Form<AuthGrantQuery>,
 ) -> Response {
+    let server_url = get_server_url_from_headers(&headers);
     let res = match req {
         AuthGrantQuery::AuthorizationCode {
             code,
@@ -96,6 +104,7 @@ pub async fn handle_oauth_token_grant(
                 code_verifier,
                 client_id,
                 client_secret,
+                &server_url,
             )
             .await
         }
@@ -103,11 +112,14 @@ pub async fn handle_oauth_token_grant(
             refresh_token,
             client_id,
             client_secret,
-        } => handle_refresh_token_grant(&ctx, refresh_token, client_id, client_secret).await,
+        } => {
+            handle_refresh_token_grant(&ctx, refresh_token, client_id, client_secret, &server_url)
+                .await
+        }
         AuthGrantQuery::ClientCredentials {
             client_id,
             client_secret,
-        } => handle_client_credentials_grant(&ctx, client_id, client_secret).await,
+        } => handle_client_credentials_grant(&ctx, client_id, client_secret, &server_url).await,
     };
 
     match res {
@@ -158,6 +170,7 @@ fn generate_access_token_with_identity(
     res: ValidationRes,
     email: Option<String>,
     ai_account_delegated_identities: Vec<DelegatedIdentityWire>,
+    server_url: &str,
 ) -> TokenGrantRes {
     let delegated_identity = delegate_identity(&identity, res.access_max_age);
     let user_principal = identity.sender().unwrap();
@@ -166,28 +179,29 @@ fn generate_access_token_with_identity(
         &ctx.jwk_pairs.auth_tokens.encoding_key,
         user_principal,
         delegated_identity,
-        &ctx.server_url,
         client_id,
         nonce.clone(),
         is_anonymous,
         res.access_max_age,
         email.clone(),
         ai_account_delegated_identities,
+        server_url,
     );
     let refresh_token = generate_refresh_token_jwt(
         &ctx.jwk_pairs.auth_tokens.encoding_key,
         user_principal,
-        &ctx.server_url,
         client_id,
         nonce,
         is_anonymous,
         res.refresh_max_age,
         email,
+        server_url,
     );
 
     TokenGrantRes::new(access_token, id_token, refresh_token)
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn generate_access_token(
     ctx: &ServerCtx,
     user_principal: Principal,
@@ -196,6 +210,7 @@ async fn generate_access_token(
     is_anonymous: bool,
     validation_res: ValidationRes,
     email: Option<String>,
+    server_url: &str,
 ) -> Result<TokenGrantRes, TokenGrantError> {
     let identity_jwk = ctx
         .kv_store
@@ -236,6 +251,7 @@ async fn generate_access_token(
         validation_res,
         email,
         ai_account_delegated_identities,
+        server_url,
     );
 
     Ok(grant)
@@ -248,6 +264,7 @@ async fn handle_authorization_code_grant(
     code_verifier: String,
     client_id: String,
     client_secret: Option<String>,
+    server_url: &str,
 ) -> Result<TokenGrantRes, TokenGrantError> {
     // Set Sentry context for this grant flow
     crate::middleware::sentry_user::add_tag("grant_type", "authorization_code");
@@ -258,7 +275,7 @@ async fn handle_authorization_code_grant(
 
     let mut validation = jsonwebtoken::Validation::new(jsonwebtoken::Algorithm::ES256);
     validation.set_audience(&[&client_id]);
-    validation.set_issuer(&[&ctx.server_url]);
+    validation.set_issuer(&[server_url]);
 
     let auth_code = jsonwebtoken::decode::<AuthCodeClaims>(
         &code,
@@ -299,6 +316,7 @@ async fn handle_authorization_code_grant(
         false,
         validation_res,
         code_claims.ext_email,
+        server_url,
     )
     .await?;
 
@@ -310,6 +328,7 @@ async fn handle_refresh_token_grant(
     refresh_token: String,
     client_id: String,
     client_secret: Option<String>,
+    server_url: &str,
 ) -> Result<TokenGrantRes, TokenGrantError> {
     // Set Sentry context for this grant flow
     crate::middleware::sentry_user::add_tag("grant_type", "refresh_token");
@@ -319,7 +338,7 @@ async fn handle_refresh_token_grant(
 
     let mut validation = jsonwebtoken::Validation::new(jsonwebtoken::Algorithm::ES256);
     validation.set_audience(&[&client_id]);
-    validation.set_issuer(&[&ctx.server_url]);
+    validation.set_issuer(&[server_url]);
 
     let refresh_token = jsonwebtoken::decode::<RefreshTokenClaims>(
         &refresh_token,
@@ -344,6 +363,7 @@ async fn handle_refresh_token_grant(
         refresh_claims.ext_is_anonymous,
         validation_res,
         refresh_claims.ext_email,
+        server_url,
     )
     .await?;
 
@@ -361,6 +381,16 @@ async fn client_credentials_grant_for_backend(
 ) -> Result<TokenGrantRes, TokenGrantError> {
     // Set Sentry tag for backend service type
     crate::middleware::sentry_user::add_tag("client_type", "backend_service");
+
+    let server_url = match get_server_url_from_request().await {
+        Ok(url) => url,
+        Err(e) => {
+            return Err(TokenGrantError {
+                error: TokenGrantErrorKind::ServerError,
+                error_description: e.to_string(),
+            });
+        }
+    };
 
     let internal_key = backend_service_principal_lookup_key(&client_id);
     let princ_res = ctx
@@ -381,7 +411,17 @@ async fn client_credentials_grant_for_backend(
     if let Some(principal) = princ_res {
         // Set user context for existing backend service principal
         crate::middleware::sentry_user::set_user_context(principal);
-        return generate_access_token(ctx, principal, &client_id, None, false, res, None).await;
+        return generate_access_token(
+            ctx,
+            principal,
+            &client_id,
+            None,
+            false,
+            res,
+            None,
+            &server_url,
+        )
+        .await;
     }
 
     let identity = generate_random_identity_and_save(&ctx.kv_store)
@@ -412,6 +452,7 @@ async fn client_credentials_grant_for_backend(
         res,
         None,
         Vec::new(),
+        &server_url,
     );
 
     Ok(grant)
@@ -421,6 +462,7 @@ async fn handle_client_credentials_grant(
     ctx: &ServerCtx,
     client_id: String,
     client_secret: Option<String>,
+    server_url: &str,
 ) -> Result<TokenGrantRes, TokenGrantError> {
     // Set Sentry context for this grant flow
     crate::middleware::sentry_user::add_tag("grant_type", "client_credentials");
@@ -454,6 +496,7 @@ async fn handle_client_credentials_grant(
         validation_res,
         None,
         Vec::new(),
+        server_url,
     );
 
     Ok(grant)
