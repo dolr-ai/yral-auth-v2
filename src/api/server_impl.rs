@@ -1,4 +1,5 @@
 use axum::{
+    http::HeaderMap,
     response::{IntoResponse, Response},
     Extension, Form, Json,
 };
@@ -27,7 +28,8 @@ use crate::{
         TokenGrantResult,
     },
     utils::{
-        identity::generate_random_identity_and_save, server_url::get_server_url_from_request,
+        identity::generate_random_identity_and_save,
+        server_url::{self, get_server_url_from_headers, get_server_url_from_request},
         time::current_epoch,
     },
 };
@@ -70,15 +72,8 @@ pub async fn handle_well_known_jwks(Extension(ctx): Extension<Arc<ServerCtx>>) -
     Json(ctx.jwk_pairs.well_known_jwks.clone()).into_response()
 }
 
-pub async fn handle_oidc_configuration() -> Response {
-    let server_url = match get_server_url_from_request().await {
-        Ok(url) => url,
-        Err(e) => {
-            let mut res = Json(serde_json::json!({"error": e.to_string()})).into_response();
-            *res.status_mut() = axum::http::StatusCode::INTERNAL_SERVER_ERROR;
-            return res;
-        }
-    };
+pub async fn handle_oidc_configuration(headers: HeaderMap) -> Response {
+    let server_url = server_url::get_server_url_from_headers(&headers);
     let jwks_uri = format!("{}/.well-known/jwks.json", server_url);
 
     Json(PartialOIDCConfig { jwks_uri }).into_response()
@@ -90,21 +85,10 @@ pub async fn healthz() -> Response {
 
 pub async fn handle_oauth_token_grant(
     Extension(ctx): Extension<Arc<ServerCtx>>,
+    headers: HeaderMap,
     Form(req): Form<AuthGrantQuery>,
 ) -> Response {
-    let server_url = match get_server_url_from_request().await {
-        Ok(url) => url,
-        Err(e) => {
-            let error = TokenGrantError {
-                error: TokenGrantErrorKind::ServerError,
-                error_description: e.to_string(),
-            };
-            let status_code = error.error.status_code();
-            let mut res = Json(error).into_response();
-            *res.status_mut() = status_code;
-            return res;
-        }
-    };
+    let server_url = get_server_url_from_headers(&headers);
     let res = match req {
         AuthGrantQuery::AuthorizationCode {
             code,
