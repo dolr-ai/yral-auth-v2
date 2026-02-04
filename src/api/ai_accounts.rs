@@ -17,10 +17,13 @@ pub fn ai_account_message() -> yral_identity::msg_builder::Message {
     Message::default().method_name("yral_auth_v2_create_ai_account".into())
 }
 
-pub const MAX_AI_ACCOUNTS: u8 = 3;
+#[cfg(feature = "ssr")]
+fn ai_account_counter_key(principal: &Principal) -> String {
+    format!("{}-ai-account-counter", principal.to_text())
+}
 
 #[cfg(feature = "ssr")]
-fn ai_account_key(principal: &Principal, num: u8) -> String {
+fn ai_account_key(principal: &Principal, num: u64) -> String {
     format!("{}-ai-account-{}", principal.to_text(), num)
 }
 
@@ -94,35 +97,25 @@ pub async fn create_ai_account(
         ));
     }
 
-    let mut next_slot: Option<u8> = None;
-    for num in 1..=MAX_AI_ACCOUNTS {
-        let key = ai_account_key(&main_principal, num);
-        match ctx.kv_store.has_key(key).await {
-            Ok(exists) => {
-                if !exists && next_slot.is_none() {
-                    next_slot = Some(num);
-                }
-            }
-            Err(e) => {
-                return Err(ServerFnError::new(format!("Storage error: {}", e)));
-            }
-        }
-    }
-
-    let slot = match next_slot {
-        Some(s) => s,
-        None => {
-            return Err(ServerFnError::new(format!(
-                "Maximum of {} AI accounts already created",
-                MAX_AI_ACCOUNTS
-            )));
-        }
+    // Get current counter and increment
+    let counter_key = ai_account_counter_key(&main_principal);
+    let current_count: u64 = match ctx.kv_store.read(counter_key.clone()).await {
+        Ok(Some(count_str)) => count_str.parse().unwrap_or(0),
+        Ok(None) => 0,
+        Err(e) => return Err(ServerFnError::new(format!("Storage error: {}", e))),
     };
+
+    let next_slot = current_count + 1;
+
+    // Update counter
+    if let Err(e) = ctx.kv_store.write(counter_key, next_slot.to_string()).await {
+        return Err(ServerFnError::new(format!("Storage error: {}", e)));
+    }
 
     let ai_secret = k256::SecretKey::random(&mut rand::rngs::OsRng);
     let ai_secret_jwk = ai_secret.to_jwk_string().to_string();
 
-    let key = ai_account_key(&main_principal, slot);
+    let key = ai_account_key(&main_principal, next_slot);
     if let Err(e) = ctx.kv_store.write(key, ai_secret_jwk).await {
         return Err(ServerFnError::new(format!("Storage error: {}", e)));
     }
@@ -150,7 +143,15 @@ pub async fn get_ai_accounts_for_principal(
 ) -> Result<Vec<AIAccountResponse>, String> {
     let mut ai_accounts = Vec::new();
 
-    for num in 1..=MAX_AI_ACCOUNTS {
+    // Get the counter to know how many accounts exist
+    let counter_key = ai_account_counter_key(&main_principal);
+    let count: u64 = match ctx.kv_store.read(counter_key).await {
+        Ok(Some(count_str)) => count_str.parse().unwrap_or(0),
+        Ok(None) => 0,
+        Err(e) => return Err(e.to_string()),
+    };
+
+    for num in 1..=count {
         let key = ai_account_key(&main_principal, num);
         match ctx.kv_store.read(key).await {
             Ok(Some(jwk_str)) => {
