@@ -343,7 +343,6 @@ impl ServerCtx {
             Self {
                 oauth_http_client,
                 oauth_providers,
-                server_url,
                 cookie_key,
                 jwk_pairs: JwkPairs::default(),
                 kv_store,
