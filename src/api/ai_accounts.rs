@@ -81,7 +81,7 @@ pub async fn create_ai_account(
     let msg = ai_account_message();
     signature
         .verify_identity(user_principal, msg)
-        .map_err(|_| ServerFnError::new("Invalid signature"))?;
+        .map_err(|e| ServerFnError::new(format!("Invalid signature: {e}")))?;
 
     let main_principal = user_principal;
 
