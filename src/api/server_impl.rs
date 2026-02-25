@@ -433,3 +433,50 @@ async fn handle_client_credentials_grant(
 
     Ok(grant)
 }
+
+
+#[cfg(test)] 
+mod tests {
+    use std::{error::Error, time::Duration};
+
+    use ic_agent::{Identity, identity::{DelegatedIdentity, Secp256k1Identity}};
+    use k256::SecretKey;
+    use rand::rngs::OsRng;
+    use yral_types::delegated_identity::DelegatedIdentityWire;
+
+    use crate::api::server_impl::delegate_identity;
+
+    fn validate_delegated_identity_wire(value: DelegatedIdentityWire) -> Result<DelegatedIdentity, Box<dyn Error>> {
+        let to_secret = k256::SecretKey::from_jwk(&value.to_secret)?;
+        let to_identity = Secp256k1Identity::from_private_key(to_secret);
+        DelegatedIdentity::new(
+            value.from_key,
+            Box::new(to_identity),
+            value.delegation_chain,
+        )
+        .map_err(|e| Box::new(e) as Box<dyn Error>)
+
+    }
+
+    fn create_test_identity_wire(from_key: impl Identity) -> DelegatedIdentityWire {
+
+
+
+        delegate_identity(&from_key, Duration::from_hours(1))
+    }
+
+
+    #[test]
+    fn test_fn() {
+
+        let from_main_secret_key = SecretKey::random(&mut OsRng);
+
+        let from_key = Secp256k1Identity::from_private_key(from_main_secret_key);
+
+
+        let result = validate_delegated_identity_wire(create_test_identity_wire(from_key)).unwrap();
+
+
+        let result = validate_delegated_identity_wire(create_test_identity_wire(result)).unwrap();
+    }
+}
