@@ -75,6 +75,9 @@ jobs:
           cargo fmt --check
           cargo clippy --no-deps --all-features --release -- -Dwarnings
 
+      - name: Run tests
+        run: cargo test --lib --features ssr,phone-auth
+
       - name: Build the Leptos project to `musl` output
         run: cargo leptos build --release --lib-features release-lib --bin-features release-bin
         env:
