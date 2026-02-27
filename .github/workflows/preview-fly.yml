@@ -17,6 +17,7 @@ jobs:
     uses: ./.github/workflows/build-check.yml
     with:
       publish-artifact: true
+    secrets: inherit
 
   preview:
     if: github.event.action != 'closed'
