@@ -1,4 +1,4 @@
-use std::{num::NonZeroU32, sync::Arc};
+use std::sync::Arc;
 
 use axum::{
     body::Body as AxumBody,
@@ -12,7 +12,9 @@ use leptos::{config::get_configuration, logging::log, prelude::provide_context};
 use leptos_axum::{generate_route_list, handle_server_fns_with_context, LeptosRoutes};
 use sentry_tower::{NewSentryLayer, SentryHttpLayer};
 use tower::ServiceBuilder;
-use tower_governor::{GovernorLayer, governor::{Governor, GovernorConfig, GovernorConfigBuilder}, key_extractor::SmartIpKeyExtractor};
+use tower_governor::{
+    governor::GovernorConfigBuilder, key_extractor::SmartIpKeyExtractor, GovernorLayer,
+};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use yral_auth_v2::{
@@ -117,14 +119,12 @@ async fn main() {
         .layer(NewSentryLayer::new_from_top())
         .layer(SentryHttpLayer::with_transaction());
 
-
-let governor_conf = GovernorConfigBuilder::default()
-    .per_second(5)
-    .burst_size(10)
-    .key_extractor(SmartIpKeyExtractor)
-    .finish()
-    .unwrap();
-
+    let governor_conf = GovernorConfigBuilder::default()
+        .per_second(5)
+        .burst_size(10)
+        .key_extractor(SmartIpKeyExtractor)
+        .finish()
+        .unwrap();
 
     let app = Router::new()
         .route(
