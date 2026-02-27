@@ -78,7 +78,7 @@ jobs:
       - name: Run tests
         run: cargo test --lib --features ssr,phone-auth
         env:
-          DRAGONFLY_HOSTS: ${{ secrets.DRAGONFLY_HOSTS }}
+          DRAGONFLY_HOSTS: ${{ vars.DRAGONFLY_HOSTS }}
           DRAGONFLY_PASSWORD: ${{ secrets.DRAGONFLY_PASSWORD }}
           DRAGONFLY_CA_CERT: ${{ secrets.DRAGONFLY_CA_CERT }}
           DRAGONFLY_CLIENT_CERT: ${{ secrets.DRAGONFLY_CLIENT_CERT }}
