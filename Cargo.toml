@@ -77,7 +77,7 @@ yral-types = { git = "https://github.com/yral-dapp/yral-common.git", branch = "m
 yral-identity = { git = "https://github.com/yral-dapp/yral-common.git", branch = "master", default-features = false }
 reqwest = { version = "0.12.3", default-features=false, features = ["json", "rustls-tls"]}
 async-trait = "0.1.89"
-tower_governor = { version = "0.8.0", features = ["axum"] }
+tower_governor = { version = "0.8.0", features = ["axum"], optional = true }
 
 [features]
 redis-kv = []
@@ -119,6 +119,7 @@ ssr = [
     "dep:tracing-subscriber",
     "dep:tracing",
     "dep:tower",
+    "dep:tower_governor",
 ]
 release-lib = ["hydrate", "google-oauth", "apple-oauth", "phone-auth"]
 release-bin = ["ssr", "redis-kv", "google-oauth", "apple-oauth", "phone-auth"]
