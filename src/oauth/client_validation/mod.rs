@@ -1,7 +1,8 @@
+#[macro_use]
+mod whitelist;
+
 #[cfg(test)]
 mod tests;
-
-mod whitelist;
 
 use std::{
     collections::HashMap,

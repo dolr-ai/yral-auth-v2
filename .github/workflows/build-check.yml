@@ -75,6 +75,15 @@ jobs:
           cargo fmt --check
           cargo clippy --no-deps --all-features --release -- -Dwarnings
 
+      - name: Run tests
+        run: cargo test --lib --features ssr,phone-auth
+        env:
+          DRAGONFLY_HOSTS: ${{ vars.DRAGONFLY_HOSTS }}
+          DRAGONFLY_PASSWORD: ${{ secrets.DRAGONFLY_PASSWORD }}
+          DRAGONFLY_CA_CERT: ${{ secrets.DRAGONFLY_CA_CERT }}
+          DRAGONFLY_CLIENT_CERT: ${{ secrets.DRAGONFLY_CLIENT_CERT }}
+          DRAGONFLY_CLIENT_KEY: ${{ secrets.DRAGONFLY_CLIENT_KEY }}
+
       - name: Build the Leptos project to `musl` output
         run: cargo leptos build --release --lib-features release-lib --bin-features release-bin
         env:

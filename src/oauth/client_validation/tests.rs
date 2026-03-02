@@ -1,4 +1,4 @@
-use super::{whitelist::whitelist, OAuthClient, OAuthClientType};
+use super::{OAuthClient, OAuthClientType};
 use std::collections::HashMap;
 
 #[test]
