@@ -5,6 +5,8 @@
 
 # Main auth domain
 auth.yral.com {
+    tls internal
+
     # Reverse proxy to the yral-auth service
     reverse_proxy yral-auth:8080 {
         # Health checking
@@ -43,6 +45,8 @@ auth.yral.com {
 
 # Secondary auth domain
 auth.dolr.ai {
+    tls internal
+
     # Reverse proxy to the yral-auth service
     reverse_proxy yral-auth:8080 {
         # Health checking
