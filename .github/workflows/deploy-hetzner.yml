@@ -75,9 +75,13 @@ jobs:
           cache-to: type=gha,mode=max
 
   deploy:
-    name: Deploy to Hetzner
+    name: Deploy to Hetzner (${{ matrix.host }})
     needs: build-and-push
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        host: ${{ fromJson(vars.HETZNER_HOSTS) }}
 
     steps:
       - name: Checkout repository
@@ -90,27 +94,27 @@ jobs:
 
       - name: Add server to known hosts
         run: |
-          ssh-keyscan -H 138.201.196.246 >> ~/.ssh/known_hosts
+          ssh-keyscan -H ${{ matrix.host }} >> ~/.ssh/known_hosts
 
       - name: Check server connectivity
         run: |
-          ssh -o ConnectTimeout=10 root@138.201.196.246 "echo 'Server connection successful'"
+          ssh -o ConnectTimeout=10 root@${{ matrix.host }} "echo 'Server connection successful'"
 
       - name: Sync deployment files to server
         run: |
           rsync -avz --delete \
             ./deploy/ \
-            root@138.201.196.246:/home/yral-auth/
+            root@${{ matrix.host }}:/home/yral-auth/
 
       - name: Log in to GitHub Container Registry on server
         run: |
-          ssh root@138.201.196.246 "
+          ssh root@${{ matrix.host }} "
             echo '${{ secrets.GITHUB_TOKEN }}' | docker login ghcr.io -u ${{ github.actor }} --password-stdin
           "
 
       - name: Deploy with Docker Compose
         run: |
-          ssh root@138.201.196.246 "
+          ssh root@${{ matrix.host }} "
             cd /home/yral-auth
 
             echo 'Pulling latest images...'
@@ -148,7 +152,7 @@ jobs:
 
       - name: Verify deployment
         run: |
-          ssh root@138.201.196.246 "
+          ssh root@${{ matrix.host }} "
             cd /home/yral-auth
 
             echo '=== Container Status ==='
@@ -162,7 +166,7 @@ jobs:
       - name: Deployment summary
         run: |
           echo "## Deployment Summary" >> $GITHUB_STEP_SUMMARY
-          echo "- **Target Server**: 138.201.196.246" >> $GITHUB_STEP_SUMMARY
+          echo "- **Target Server**: ${{ matrix.host }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Deployment Method**: Docker Compose" >> $GITHUB_STEP_SUMMARY
           echo "- **Images**:" >> $GITHUB_STEP_SUMMARY
           echo "  - ghcr.io/${{ github.repository }}:${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
