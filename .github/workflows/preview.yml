@@ -97,6 +97,12 @@ jobs:
             secret/data/yral-auth-v2/CLIENT_JWT_ED_PEM value | CLIENT_JWT_ED_PEM ;
             secret/data/yral-auth-v2/APPLE_AUTH_KEY_PEM value | APPLE_AUTH_KEY_PEM ;
             secret/data/yral-auth-v2/WHATAPP_MESSAGE_SERVICE_API_KEY value | WHATSAPP_API_KEY ;
+            secret/data/yral-auth-v2/GOOGLE_CLIENT_ID value | GOOGLE_CLIENT_ID ;
+            secret/data/yral-auth-v2/JWT_PUB_EC_PEM value | JWT_PUB_EC_PEM ;
+            secret/data/yral-auth-v2/APPLE_CLIENT_ID value | APPLE_CLIENT_ID ;
+            secret/data/yral-auth-v2/APPLE_TEAM_ID value | APPLE_TEAM_ID ;
+            secret/data/yral-auth-v2/APPLE_KEY_ID value | APPLE_KEY_ID ;
+            secret/data/yral-auth-v2/CLIENT_JWT_PUB_ED_PEM value | CLIENT_JWT_PUB_ED_PEM ;
             secret/data/DRAGONFLY_CLUSTER_1_PASSWORD value | DRAGONFLY_PASSWORD ;
             secret/data/DRAGONFLY_CLUSTER_1_HOSTS value | DRAGONFLY_HOSTS ;
             secret/data/DRAGONFLY_CLUSTER_1_CA_CERT value | DRAGONFLY_CA_CERT ;
@@ -160,11 +166,19 @@ jobs:
           CLIENT_JWT_ED_PEM: ${{ env.CLIENT_JWT_ED_PEM }}
           APPLE_AUTH_KEY_PEM: ${{ env.APPLE_AUTH_KEY_PEM }}
           WHATSAPP_API_KEY: ${{ env.WHATSAPP_API_KEY }}
+          GOOGLE_CLIENT_ID: ${{ env.GOOGLE_CLIENT_ID }}
+          JWT_PUB_EC_PEM: ${{ env.JWT_PUB_EC_PEM }}
+          APPLE_CLIENT_ID: ${{ env.APPLE_CLIENT_ID }}
+          APPLE_TEAM_ID: ${{ env.APPLE_TEAM_ID }}
+          APPLE_KEY_ID: ${{ env.APPLE_KEY_ID }}
+          CLIENT_JWT_PUB_ED_PEM: ${{ env.CLIENT_JWT_PUB_ED_PEM }}
           DRAGONFLY_PASSWORD: ${{ env.DRAGONFLY_PASSWORD }}
           DRAGONFLY_HOSTS: ${{ env.DRAGONFLY_HOSTS }}
           DRAGONFLY_CA_CERT: ${{ env.DRAGONFLY_CA_CERT }}
           DRAGONFLY_CLIENT_CERT: ${{ env.DRAGONFLY_CLIENT_CERT }}
           DRAGONFLY_CLIENT_KEY: ${{ env.DRAGONFLY_CLIENT_KEY }}
+          APP_ENV: "preview"
+          PORT: "8080"
         run: |
           APP_UUID="${{ steps.coolify_app.outputs.app_uuid }}"
           flatten() { echo "$1" | tr -d '\n\r'; }
@@ -176,11 +190,19 @@ jobs:
             --arg client_jwt_ed_pem "$CLIENT_JWT_ED_PEM" \
             --arg apple_auth_key_pem "$APPLE_AUTH_KEY_PEM" \
             --arg whatsapp_api_key "$WHATSAPP_API_KEY" \
+            --arg google_client_id "$GOOGLE_CLIENT_ID" \
+            --arg jwt_pub_ec_pem "$JWT_PUB_EC_PEM" \
+            --arg apple_client_id "$APPLE_CLIENT_ID" \
+            --arg apple_team_id "$APPLE_TEAM_ID" \
+            --arg apple_key_id "$APPLE_KEY_ID" \
+            --arg client_jwt_pub_ed_pem "$CLIENT_JWT_PUB_ED_PEM" \
             --arg dragonfly_password "$DRAGONFLY_PASSWORD" \
             --arg dragonfly_hosts "$DRAGONFLY_HOSTS" \
             --arg dragonfly_ca_cert "$DRAGONFLY_CA_CERT" \
             --arg dragonfly_client_cert "$DRAGONFLY_CLIENT_CERT" \
             --arg dragonfly_client_key "$DRAGONFLY_CLIENT_KEY" \
+            --arg app_env "$APP_ENV" \
+            --arg port "$PORT" \
             '[
               {"key": "COOKIE_KEY", "value": $cookie_key, "is_literal": true},
               {"key": "GOOGLE_CLIENT_SECRET", "value": $google_client_secret, "is_literal": true},
@@ -188,11 +210,19 @@ jobs:
               {"key": "CLIENT_JWT_ED_PEM", "value": $client_jwt_ed_pem, "is_multiline": true},
               {"key": "APPLE_AUTH_KEY_PEM", "value": $apple_auth_key_pem, "is_multiline": true},
               {"key": "WHATSAPP_API_KEY", "value": $whatsapp_api_key, "is_literal": true},
+              {"key": "GOOGLE_CLIENT_ID", "value": $google_client_id, "is_literal": true},
+              {"key": "JWT_PUB_EC_PEM", "value": $jwt_pub_ec_pem, "is_multiline": true},
+              {"key": "APPLE_CLIENT_ID", "value": $apple_client_id, "is_literal": true},
+              {"key": "APPLE_TEAM_ID", "value": $apple_team_id, "is_literal": true},
+              {"key": "APPLE_KEY_ID", "value": $apple_key_id, "is_literal": true},
+              {"key": "CLIENT_JWT_PUB_ED_PEM", "value": $client_jwt_pub_ed_pem, "is_multiline": true},
               {"key": "DRAGONFLY_PASSWORD", "value": $dragonfly_password, "is_literal": true},
               {"key": "DRAGONFLY_HOSTS", "value": $dragonfly_hosts, "is_literal": true},
               {"key": "DRAGONFLY_CA_CERT", "value": $dragonfly_ca_cert, "is_multiline": true},
               {"key": "DRAGONFLY_CLIENT_CERT", "value": $dragonfly_client_cert, "is_multiline": true},
               {"key": "DRAGONFLY_CLIENT_KEY", "value": $dragonfly_client_key, "is_multiline": true}
+              {"key": "APP_ENV", "value": $app_env, "is_literal": true},
+              {"key": "PORT", "value": $port, "is_literal": true}
             ]')
 
           RESPONSE=$(curl -s -o /tmp/curl_response.txt -w "%{http_code}" -X PATCH \
