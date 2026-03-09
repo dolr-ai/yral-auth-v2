@@ -11,6 +11,11 @@ const RAW_METADATA_TABLE: TableDefinition<&str, &str> = TableDefinition::new("kv
 #[derive(Clone)]
 pub struct ReDBKV(Arc<Database>);
 
+// Helper to convert any error that converts to redb::Error into Box<redb::Error>
+fn box_err<E: Into<redb::Error>>(e: E) -> Box<redb::Error> {
+    Box::new(e.into())
+}
+
 impl ReDBKV {
     #[allow(clippy::result_large_err)]
     pub fn new() -> Result<Self, redb::Error> {
@@ -26,21 +31,21 @@ impl ReDBKV {
 
     fn spawn_blocking<F, R>(&self, f: F) -> tokio::task::JoinHandle<Result<R, KVError>>
     where
-        F: FnOnce(&Database) -> Result<R, redb::Error> + Send + 'static,
+        F: FnOnce(&Database) -> Result<R, Box<redb::Error>> + Send + 'static,
         R: Send + 'static,
     {
         let db = self.0.clone();
-        spawn_blocking(move || f(&db).map_err(|e| e.into()))
+        spawn_blocking(move || f(&db).map_err(KVError::ReDB))
     }
 }
 
 impl KVStore for ReDBKV {
     async fn read(&self, key: String) -> Result<Option<String>, KVError> {
         self.spawn_blocking(move |db| {
-            let read_txn = db.begin_read()?;
+            let read_txn = db.begin_read().map_err(box_err)?;
             let value = {
-                let table = read_txn.open_table(TABLE)?;
-                let v = table.get(key.as_str())?;
+                let table = read_txn.open_table(TABLE).map_err(box_err)?;
+                let v = table.get(key.as_str()).map_err(box_err)?;
                 v.map(|ag| ag.value().to_string())
             };
             Ok(value)
@@ -51,13 +56,13 @@ impl KVStore for ReDBKV {
 
     async fn write(&self, key: String, value: String) -> Result<(), KVError> {
         self.spawn_blocking(move |db| {
-            let write_txn = db.begin_write()?;
+            let write_txn = db.begin_write().map_err(box_err)?;
             {
-                let mut table = write_txn.open_table(TABLE)?;
-                table.insert(key.as_str(), value.as_str())?;
+                let mut table = write_txn.open_table(TABLE).map_err(box_err)?;
+                table.insert(key.as_str(), value.as_str()).map_err(box_err)?;
             }
-            write_txn.commit()?;
-            Ok::<_, redb::Error>(())
+            write_txn.commit().map_err(box_err)?;
+            Ok(())
         })
         .await
         .unwrap()
@@ -65,10 +70,10 @@ impl KVStore for ReDBKV {
 
     async fn has_key(&self, key: String) -> Result<bool, KVError> {
         self.spawn_blocking(move |db| {
-            let read_txn = db.begin_read()?;
+            let read_txn = db.begin_read().map_err(box_err)?;
             let has_key = {
-                let table = read_txn.open_table(TABLE)?;
-                table.get(key.as_str())?.is_some()
+                let table = read_txn.open_table(TABLE).map_err(box_err)?;
+                table.get(key.as_str()).map_err(box_err)?.is_some()
             };
             Ok(has_key)
         })

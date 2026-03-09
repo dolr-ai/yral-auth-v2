@@ -11,7 +11,7 @@ pub enum KVError {
     #[error("deserialization err: {0}")]
     Deser(#[from] serde_json::Error),
     #[error(transparent)]
-    ReDB(#[from] redb::Error),
+    ReDB(#[from] Box<redb::Error>),
     #[error("{0}")]
     Redis(#[from] RedisError),
     #[error("{0}")]
