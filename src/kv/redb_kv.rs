@@ -59,7 +59,9 @@ impl KVStore for ReDBKV {
             let write_txn = db.begin_write().map_err(box_err)?;
             {
                 let mut table = write_txn.open_table(TABLE).map_err(box_err)?;
-                table.insert(key.as_str(), value.as_str()).map_err(box_err)?;
+                table
+                    .insert(key.as_str(), value.as_str())
+                    .map_err(box_err)?;
             }
             write_txn.commit().map_err(box_err)?;
             Ok(())
