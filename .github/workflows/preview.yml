@@ -197,7 +197,7 @@ jobs:
 
           RESPONSE=$(curl -s -o /tmp/curl_response.txt -w "%{http_code}" -X PATCH \
             "https://coolify.yral.com/api/v1/applications/${APP_UUID}/envs/bulk" \
-            -H "Authorization: Bearer ${{ secrets.COOLIFY_TOKEN }}" \
+            -H "Authorization: Bearer ${COOLIFY_TOKEN}" \
             -H "Content-Type: application/json" \
             -d "{\"data\": ${ENV_JSON}}")
 
@@ -216,14 +216,14 @@ jobs:
           # Update image tag (important on subsequent pushes to same PR)
           curl -s -X PATCH \
             "https://coolify.yral.com/api/v1/applications/${APP_UUID}" \
-            -H "Authorization: Bearer ${{ secrets.COOLIFY_TOKEN }}" \
+            -H "Authorization: Bearer ${COOLIFY_TOKEN}" \
             -H "Content-Type: application/json" \
             -d "{\"docker_registry_image_tag\": \"${IMAGE_TAG}\"}"
 
           # Trigger deploy
           RESPONSE=$(curl -s -X POST \
             "https://coolify.yral.com/api/v1/applications/${APP_UUID}/start" \
-            -H "Authorization: Bearer ${{ secrets.COOLIFY_TOKEN }}" \
+            -H "Authorization: Bearer ${COOLIFY_TOKEN}" \
             -H "Content-Type: application/json" \
             -d "{
               \"uuid\": \"${APP_UUID}\",
@@ -250,7 +250,7 @@ jobs:
           while [ $WAITED -lt $MAX_WAIT ]; do
             STATUS=$(curl -s \
               "https://coolify.yral.com/api/v1/deployments/${DEPLOY_UUID}" \
-              -H "Authorization: Bearer ${{ secrets.COOLIFY_TOKEN }}" \
+              -H "Authorization: Bearer ${COOLIFY_TOKEN}" \
               | jq -r '.status // empty')
 
             echo "Status: ${STATUS} (${WAITED}s elapsed)"
