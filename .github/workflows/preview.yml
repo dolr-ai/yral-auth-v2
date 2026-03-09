@@ -220,7 +220,7 @@ jobs:
               {"key": "DRAGONFLY_HOSTS", "value": $dragonfly_hosts, "is_literal": true},
               {"key": "DRAGONFLY_CA_CERT", "value": $dragonfly_ca_cert, "is_multiline": true},
               {"key": "DRAGONFLY_CLIENT_CERT", "value": $dragonfly_client_cert, "is_multiline": true},
-              {"key": "DRAGONFLY_CLIENT_KEY", "value": $dragonfly_client_key, "is_multiline": true}
+              {"key": "DRAGONFLY_CLIENT_KEY", "value": $dragonfly_client_key, "is_multiline": true},
               {"key": "APP_ENV", "value": $app_env, "is_literal": true},
               {"key": "PORT", "value": $port, "is_literal": true}
             ]')
