@@ -100,32 +100,29 @@ jobs:
         run: |
           PUB_KEY="${{ needs.generate-and-store-key.outputs.public_key }}"
 
+          # First create the user
           ssh root@${{ matrix.host }} "
             set -e
-
-            # Create user if not exists
             if id 'yral-auth' &>/dev/null; then
               echo 'User yral-auth already exists, skipping creation'
             else
               useradd -m -s /bin/bash 'yral-auth'
               echo 'User yral-auth created'
             fi
-
-            # Setup .ssh directory
             mkdir -p /home/yral-auth/.ssh
             chmod 700 /home/yral-auth/.ssh
-
-            # Add public key
-            echo "$PUB_KEY" > /home/yral-auth/.ssh/authorized_keys
+            touch /home/yral-auth/.ssh/authorized_keys
             chmod 600 /home/yral-auth/.ssh/authorized_keys
             chown -R yral-auth:yral-auth /home/yral-auth/.ssh
-
-            # Add to docker group
             usermod -aG docker yral-auth
-            echo 'User yral-auth added to docker group'
-
-            echo 'Setup complete on ${{ matrix.host }}'
           "
+
+          # Write the public key separately via stdin to avoid quoting issues
+          echo "$PUB_KEY" | ssh root@${{ matrix.host }} \
+            "cat > /home/yral-auth/.ssh/authorized_keys && \
+            chown yral-auth:yral-auth /home/yral-auth/.ssh/authorized_keys"
+
+          echo "Setup complete on ${{ matrix.host }}"
 
       - name: Import SSH key from Vault to verify
         uses: hashicorp/vault-action@v3
