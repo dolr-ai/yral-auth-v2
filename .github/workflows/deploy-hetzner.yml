@@ -1,241 +1,44 @@
-name: Deploy to Hetzner Bare Metal
+name: Setup yral-auth Deploy User
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
 
-concurrency:
-  group: deploy-hetzner-${{ github.ref }}
-  cancel-in-progress: false
-
-env:
-  DOCKER_REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+permissions:
+  id-token: write
+  contents: read
 
 jobs:
-  build_check:
-    uses: ./.github/workflows/build-check.yml
-    with:
-      publish-artifact: true
-    secrets: inherit
-
-  build-and-push:
-    name: Build and Push Docker Images
-    needs: build_check
+  prepare-servers:
+    name: Prepare Server List
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-
     outputs:
-      image_tag: ${{ steps.meta.outputs.tags }}
-
+      servers: ${{ steps.parse.outputs.servers }}
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Download build artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: build-musl
-
-      - name: Make binary executable
-        run: chmod +x target/x86_64-unknown-linux-musl/release/yral-auth-v2
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.DOCKER_REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract metadata for yral-auth-v2
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=sha,format=long,prefix=
-            type=raw,value=latest
-
-      - name: Build and push yral-auth-v2 image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: ./deploy/Dockerfile
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-  deploy:
-    name: Deploy to Hetzner (${{ matrix.host }})
-    needs: build-and-push
-    runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-      contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        host: ${{ fromJson(vars.HETZNER_HOSTS) }}
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Import SSH key from Vault
-        uses: hashicorp/vault-action@v3
-        with:
-          url: https://vault.yral.com
-          method: jwt
-          role: yral-auth-v2-role
-          jwtGithubAudience: "https://github.com/dolr-ai"
-          secrets: |
-            secret/data/yral-auth-v2/SSH_PRIVATE_KEY value | SSH_PRIVATE_KEY ;
-
-      - name: Setup SSH key
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ env.SSH_PRIVATE_KEY }}
-
-      - name: Add server to known hosts
-        run: |
-          ssh-keyscan -H ${{ matrix.host }} >> ~/.ssh/known_hosts
-
-      - name: Check server connectivity
-        run: |
-          ssh -o ConnectTimeout=10 yral-auth@${{ matrix.host }} "echo 'Server connection successful'"
-
-      - name: Sync deployment files to server
-        run: |
-          rsync -avz --delete \
-            --exclude='.ssh/' \
-            ./deploy/ \
-            yral-auth@${{ matrix.host }}:/home/yral-auth/
-
-      - name: Log in to GitHub Container Registry on server
-        run: |
-          ssh yral-auth@${{ matrix.host }} "
-            echo '${{ secrets.GITHUB_TOKEN }}' | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-          "
-
-      - name: Deploy with Docker Compose
-        run: |
-          ssh yral-auth@${{ matrix.host }} "
-            cd /home/yral-auth
-
-            echo 'Pulling latest images...'
-            APP_IMAGE=ghcr.io/${{ github.repository }} \
-            IMAGE_TAG=${{ github.sha }} \
-            docker compose pull
-
-            echo 'Stopping existing containers...'
-            docker compose down --remove-orphans || true
-
-            echo 'Starting services...'
-            APP_IMAGE=ghcr.io/${{ github.repository }} \
-            IMAGE_TAG=${{ github.sha }} \
-            COOKIE_KEY='${{ secrets.AUTH_SESSION_COOKIE_SIGNING_SECRET_KEY }}' \
-            GOOGLE_CLIENT_SECRET='${{ secrets.GOOGLE_SIGNING_OAUTH_CLIENT_CREDENTIAL_CLIENT_SECRET }}' \
-            JWT_EC_PEM='${{ secrets.AUTH_JWT_ES256_SIGNING_SECRET_KEY_PEM }}' \
-            CLIENT_JWT_ED_PEM='${{ secrets.CLIENT_JWT_ED_PEM }}' \
-            APPLE_AUTH_KEY_PEM='${{ secrets.APPLE_AUTH_KEY_PEM }}' \
-            WHATSAPP_API_KEY='${{ secrets.WHATAPP_MESSAGE_SERVICE_API_KEY }}' \
-            FLY_API_TOKEN='${{ secrets.HETZNER_FLY_API_TOKEN }}' \
-            DRAGONFLY_PASSWORD='${{ secrets.DRAGONFLY_PASSWORD }}' \
-            DRAGONFLY_HOSTS='${{ vars.DRAGONFLY_HOSTS }}' \
-            DRAGONFLY_CA_CERT='${{ secrets.DRAGONFLY_CA_CERT }}' \
-            DRAGONFLY_CLIENT_CERT='${{ secrets.DRAGONFLY_CLIENT_CERT }}' \
-            DRAGONFLY_CLIENT_KEY='${{ secrets.DRAGONFLY_CLIENT_KEY }}' \
-            docker compose up -d
-
-            echo 'Waiting for services to start...'
-            sleep 15
-
-            echo 'Services status:'
-            docker compose ps
-          "
-
-      - name: Verify deployment
-        run: |
-          ssh yral-auth@${{ matrix.host }} "
-            cd /home/yral-auth
-
-            echo '=== Container Status ==='
-            docker compose ps
-
-            echo ''
-            echo '=== Container Logs (last 20 lines) ==='
-            docker compose logs --tail=20 yral-auth 2>/dev/null || echo 'Logs not yet available'
-          "
-
-      - name: Deployment summary
-        run: |
-          echo "## Deployment Summary" >> $GITHUB_STEP_SUMMARY
-          echo "- **Target Server**: ${{ matrix.host }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Deployment Method**: Docker Compose" >> $GITHUB_STEP_SUMMARY
-          echo "- **Images**:" >> $GITHUB_STEP_SUMMARY
-          echo "  - ghcr.io/${{ github.repository }}:${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Services**: yral-auth, caddy" >> $GITHUB_STEP_SUMMARY
-          echo "- **Secrets**: Injected via environment variables at runtime" >> $GITHUB_STEP_SUMMARY
-
-  rotate-ssh-keys:
-    name: Rotate SSH Keys
-    needs: [deploy]
-    runs-on: ubuntu-latest
-    permissions:
-      id-token: write
-      contents: read
-    if: success()
-
-    steps:
-      - name: Import current SSH key from Vault
-        uses: hashicorp/vault-action@v3
-        with:
-          url: https://vault.yral.com
-          method: jwt
-          role: yral-auth-v2-role
-          jwtGithubAudience: "https://github.com/dolr-ai"
-          secrets: |
-            secret/data/yral-auth-v2/SSH_PRIVATE_KEY value | SSH_PRIVATE_KEY ;
-
-      - name: Setup current SSH key
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ env.SSH_PRIVATE_KEY }}
-
-      - name: Add servers to known hosts
+      - name: Parse server hosts
+        id: parse
         run: |
           HOSTS='${{ vars.HETZNER_HOSTS }}'
-          for host in $(echo "$HOSTS" | jq -r '.[]'); do
-            ssh-keyscan -H "$host" >> ~/.ssh/known_hosts
-          done
+          echo "servers=$HOSTS" >> $GITHUB_OUTPUT
 
-      - name: Generate new SSH key pair
+  generate-and-store-key:
+    name: Generate SSH Key and Store in Vault
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    outputs:
+      public_key: ${{ steps.keygen.outputs.public_key }}
+
+    steps:
+      - name: Generate SSH key pair
+        id: keygen
         run: |
           ssh-keygen -t ed25519 \
             -C "yral-auth-deploy-$(date +%Y%m%d)" \
             -f /tmp/new_deploy_key \
             -N ""
-          echo "NEW_PUBLIC_KEY=$(cat /tmp/new_deploy_key.pub)" >> $GITHUB_ENV
-
-      - name: Append new public key to all servers
-        run: |
-          HOSTS='${{ vars.HETZNER_HOSTS }}'
-          NEW_PUB_KEY="${{ env.NEW_PUBLIC_KEY }}"
-          for host in $(echo "$HOSTS" | jq -r '.[]'); do
-            ssh yral-auth@$host "
-              echo '$NEW_PUB_KEY' >> ~/.ssh/authorized_keys
-              echo 'New key appended on $host'
-            "
-          done
+          echo "public_key=$(cat /tmp/new_deploy_key.pub)" >> $GITHUB_OUTPUT
 
       - name: Install Vault CLI
         run: |
@@ -252,43 +55,95 @@ jobs:
           jwtGithubAudience: "https://github.com/dolr-ai"
           exportToken: true
 
-      - name: Write new private key to Vault
+      - name: Store private key in Vault
         run: |
           NEW_PRIVATE_KEY=$(cat /tmp/new_deploy_key)
           echo "::add-mask::$NEW_PRIVATE_KEY"
           vault kv put secret/yral-auth-v2/SSH_PRIVATE_KEY value="$NEW_PRIVATE_KEY"
-          echo "Vault updated with new private key"
+          echo "Private key stored in Vault at secret/yral-auth-v2/SSH_PRIVATE_KEY"
         env:
           VAULT_ADDR: https://vault.yral.com
-
-      - name: Verify new key works on all servers
-        run: |
-          ssh-add -D
-          ssh-add /tmp/new_deploy_key
-
-          HOSTS='${{ vars.HETZNER_HOSTS }}'
-          for host in $(echo "$HOSTS" | jq -r '.[]'); do
-            ssh -o PasswordAuthentication=no \
-                yral-auth@$host \
-                "echo 'New key verified on $host'"
-          done
-
-      - name: Remove old public key from all servers
-        run: |
-          HOSTS='${{ vars.HETZNER_HOSTS }}'
-          NEW_PUB_KEY="${{ env.NEW_PUBLIC_KEY }}"
-          for host in $(echo "$HOSTS" | jq -r '.[]'); do
-            ssh yral-auth@$host "
-              set -e
-              grep -F '$NEW_PUB_KEY' ~/.ssh/authorized_keys > /tmp/authorized_keys_new
-              mv /tmp/authorized_keys_new ~/.ssh/authorized_keys
-              chmod 600 ~/.ssh/authorized_keys
-              echo 'Old key removed on $host'
-            "
-          done
 
       - name: Cleanup
         if: always()
         run: |
           rm -f /tmp/new_deploy_key /tmp/new_deploy_key.pub
-          ssh-add -D || true
+
+  setup-user:
+    name: Setup yral-auth on ${{ matrix.host }}
+    needs: [prepare-servers, generate-and-store-key]
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        host: ${{ fromJson(needs.prepare-servers.outputs.servers) }}
+
+    steps:
+      - name: Setup root SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.HETZNER_BARE_METAL_GITHUB_ACTIONS_SSH_PRIVATE_KEY }}
+
+      - name: Add server to known hosts
+        run: |
+          ssh-keyscan -H ${{ matrix.host }} >> ~/.ssh/known_hosts
+
+      - name: Verify root connectivity
+        run: |
+          ssh -o ConnectTimeout=10 root@${{ matrix.host }} \
+            "echo 'Root connection successful on ${{ matrix.host }}'"
+
+      - name: Create user and setup SSH on server
+        run: |
+          PUB_KEY="${{ needs.generate-and-store-key.outputs.public_key }}"
+
+          ssh root@${{ matrix.host }} "
+            set -e
+
+            # Create user if not exists
+            if id 'yral-auth' &>/dev/null; then
+              echo 'User yral-auth already exists, skipping creation'
+            else
+              useradd -m -s /bin/bash 'yral-auth'
+              echo 'User yral-auth created'
+            fi
+
+            # Setup .ssh directory
+            mkdir -p /home/yral-auth/.ssh
+            chmod 700 /home/yral-auth/.ssh
+
+            # Add public key
+            echo '$PUB_KEY' > /home/yral-auth/.ssh/authorized_keys
+            chmod 600 /home/yral-auth/.ssh/authorized_keys
+            chown -R yral-auth:yral-auth /home/yral-auth/.ssh
+
+            # Add to docker group
+            usermod -aG docker yral-auth
+            echo 'User yral-auth added to docker group'
+
+            echo 'Setup complete on ${{ matrix.host }}'
+          "
+
+      - name: Import SSH key from Vault to verify
+        uses: hashicorp/vault-action@v3
+        with:
+          url: https://vault.yral.com
+          method: jwt
+          role: yral-auth-v2-role
+          jwtGithubAudience: "https://github.com/dolr-ai"
+          secrets: |
+            secret/data/yral-auth-v2/SSH_PRIVATE_KEY value | SSH_PRIVATE_KEY ;
+
+      - name: Setup new SSH key and test
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ env.SSH_PRIVATE_KEY }}
+
+      - name: Test SSH and docker group
+        run: |
+          ssh -o PasswordAuthentication=no \
+              yral-auth@${{ matrix.host }} \
+              "echo 'SSH verified on ${{ matrix.host }}' && groups | grep docker && echo 'Docker group verified' || echo 'WARNING: docker group not active yet'"
