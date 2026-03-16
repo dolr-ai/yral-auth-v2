@@ -116,7 +116,7 @@ jobs:
             chmod 700 /home/yral-auth/.ssh
 
             # Add public key
-            echo '$PUB_KEY' > /home/yral-auth/.ssh/authorized_keys
+            echo "$PUB_KEY" > /home/yral-auth/.ssh/authorized_keys
             chmod 600 /home/yral-auth/.ssh/authorized_keys
             chown -R yral-auth:yral-auth /home/yral-auth/.ssh
 
