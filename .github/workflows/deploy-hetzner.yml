@@ -109,6 +109,7 @@ jobs:
               useradd -m -s /bin/bash 'yral-auth'
               echo 'User yral-auth created'
             fi
+            chown yral-auth:yral-auth /home/yral-auth
             mkdir -p /home/yral-auth/.ssh
             chmod 700 /home/yral-auth/.ssh
             touch /home/yral-auth/.ssh/authorized_keys
