@@ -32,21 +32,13 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Cache Rust build artifacts
-        uses: actions/cache@v4
-        with:
-          path: target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
-
-      - name: Cache pnpm store
-        uses: actions/cache@v4
-        with:
-          path: .pnpm-store/
-          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-pnpm-
+            - name: Cache Rust build artifacts
+              uses: actions/cache@v4
+              with:
+                path: target/
+                key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock', '**/rust-toolchain.toml') }}
+                restore-keys: |
+              ${{ runner.os }}-cargo-
 
       # devcontainer.json bind-mounts ~/.ssh/agent.sock from the host so
       # developers can forward their SSH agent into the container. In CI
@@ -73,7 +65,6 @@ jobs:
           LEPTOS_BIN_TARGET_TRIPLE: x86_64-unknown-linux-musl
           LEPTOS_HASH_FILES: "true"
           LEPTOS_TAILWIND_VERSION: v4.0.15
-          PNPM_HOME: ${{ github.workspace }}/.pnpm-store
         with:
           imageName: ghcr.io/${{ github.repository }}/devcontainer
           cacheFrom: ghcr.io/${{ github.repository }}/devcontainer
@@ -88,7 +79,6 @@ jobs:
             LEPTOS_BIN_TARGET_TRIPLE
             LEPTOS_HASH_FILES
             LEPTOS_TAILWIND_VERSION
-            PNPM_HOME
           runCmd: |
             pnpm install
             cargo fmt --check
