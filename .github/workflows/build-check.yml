@@ -35,7 +35,7 @@ jobs:
           path: target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock', '**/rust-toolchain.toml') }}
           restore-keys: |
-        ${{ runner.os }}-cargo-
+            ${{ runner.os }}-cargo-
 
       # devcontainer.json bind-mounts ~/.ssh/agent.sock from the host so
       # developers can forward their SSH agent into the container. In CI
