@@ -2,6 +2,9 @@ name: Build and Check linting
 
 on:
   push:
+    branches:
+      - main
+  pull_request:
 
 jobs:
   build_check:
