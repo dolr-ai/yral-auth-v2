@@ -16,18 +16,6 @@ echo "✓ Installed dnsutils (dig, nslookup, host)"
 echo "✓ Installed musl-tools (musl-gcc)"
 echo "✓ Installed mold linker"
 
-# Install pnpm
-echo ""
-echo "Installing pnpm..."
-npm install -g pnpm@10
-echo "✓ Installed pnpm 10"
-
-# Install wasm-bindgen-cli
-echo ""
-echo "Installing wasm-bindgen-cli..."
-cargo install wasm-bindgen-cli --version 0.2.108
-echo "✓ Installed wasm-bindgen-cli 0.2.108"
-
 # Install cargo binstall
 curl -L https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-x86_64-unknown-linux-musl.tgz -o cargo-binstall.tgz;
 tar -xzf cargo-binstall.tgz;
@@ -41,3 +29,15 @@ cargo binstall cargo-leptos --no-confirm;
 
 # Install leptosfmt using cargo binstall
 cargo binstall leptosfmt --no-confirm;
+
+# Install pnpm
+echo ""
+echo "Installing pnpm..."
+npm install -g pnpm
+echo "✓ Installed pnpm"
+
+# Install wasm-bindgen-cli
+echo ""
+echo "Installing wasm-bindgen-cli..."
+cargo binstall wasm-bindgen-cli --no-confirm;
+echo "✓ Installed wasm-bindgen-cli"
