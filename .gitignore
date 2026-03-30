@@ -25,3 +25,5 @@ redb-kv.db
 .direnv
 
 .claude
+
+.pnpm-store

@@ -11,8 +11,10 @@ echo "========================================="
 # Install system packages
 echo ""
 echo "Installing system packages..."
-sudo apt-get update -qq && sudo apt-get install -y -qq dnsutils
+sudo apt-get update -qq && sudo apt-get install -y -qq dnsutils musl-tools mold
 echo "✓ Installed dnsutils (dig, nslookup, host)"
+echo "✓ Installed musl-tools (musl-gcc)"
+echo "✓ Installed mold linker"
 
 # Install cargo binstall
 curl -L https://github.com/cargo-bins/cargo-binstall/releases/latest/download/cargo-binstall-x86_64-unknown-linux-musl.tgz -o cargo-binstall.tgz;
@@ -23,7 +25,19 @@ chmod +x ~/.local/bin/cargo-binstall;
 rm cargo-binstall.tgz;
 
 # Install cargo-leptos with cargo binstall
-cargo binstall cargo-leptos --no-confirm;
+cargo binstall cargo-leptos --version 0.3.2 --no-confirm;
 
 # Install leptosfmt using cargo binstall
 cargo binstall leptosfmt --no-confirm;
+
+# Install pnpm
+echo ""
+echo "Installing pnpm..."
+npm install -g pnpm@10
+echo "✓ Installed pnpm 10"
+
+# Install wasm-bindgen-cli (must match wasm-bindgen crate version in Cargo.toml)
+echo ""
+echo "Installing wasm-bindgen-cli..."
+cargo binstall wasm-bindgen-cli --version 0.2.108 --no-confirm;
+echo "✓ Installed wasm-bindgen-cli 0.2.108"
