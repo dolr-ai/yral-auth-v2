@@ -1,13 +1,7 @@
-name: Build and Check linting (devcontainer)
+name: Build and Check linting
 
 on:
-  workflow_call:
-    inputs:
-      publish-artifact:
-        default: false
-        required: false
-        type: boolean
-  workflow_dispatch:
+  push:
 
 jobs:
   build_check:
