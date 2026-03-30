@@ -2,6 +2,7 @@ name: Build and Check linting
 
 on:
   push:
+  workflow_call:
 
 jobs:
   build_check:
