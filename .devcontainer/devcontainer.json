@@ -14,8 +14,7 @@
 		"type=bind,source=${env:HOME}/.config/gh,target=/home/vscode/.config/gh,consistency=cached"
 	],
 	"remoteEnv": {
-		"SSH_AUTH_SOCK": "/ssh-agent",
-		"GIT_WORK_TREE": "/workspaces/yral-mobile"
+		"SSH_AUTH_SOCK": "/ssh-agent"
 	},
 	// Run post-create setup script
 	"postCreateCommand": "bash .devcontainer/post-create.sh"
