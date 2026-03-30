@@ -22,11 +22,7 @@ jobs:
         uses: rui314/setup-mold@v1
 
       - name: Rust Setup
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: stable
-          targets: "x86_64-unknown-linux-musl,wasm32-unknown-unknown"
-          components: "clippy,rustfmt"
+        uses: actions-rust-lang/setup-rust-toolchain@v1
 
       - name: Install wasm-bindgen-cli
         run: cargo install wasm-bindgen-cli --version 0.2.108
