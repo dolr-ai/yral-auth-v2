@@ -58,7 +58,7 @@ pub fn default_oauth_clients() -> HashMap<String, OAuthClient> {
         {
             "4ec00561-91bb-4e60-9743-8bed684145ba",
             [
-                "https://yral.com/auth/google_redirect",
+                "https://legacy.yral.com/auth/google_redirect",
                 "https://hot-or-not-web-leptos-ssr-staging.fly.dev/auth/google_redirect"
             ],
             OAuthClientType::Web
