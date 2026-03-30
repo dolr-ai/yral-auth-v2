@@ -48,6 +48,20 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pnpm-
 
+      # devcontainer.json bind-mounts ~/.ssh/agent.sock from the host so
+      # developers can forward their SSH agent into the container. In CI
+      # there is no SSH agent socket, so create a placeholder file to
+      # prevent Docker from failing on the missing bind-mount source.
+      - name: Create SSH agent socket placeholder
+        run: mkdir -p ~/.ssh && touch ~/.ssh/agent.sock
+
+      # devcontainer.json bind-mounts ~/.config/gh so the gh CLI config is
+      # available inside the container. GitHub-hosted runners don't pre-create
+      # this directory, so Docker refuses to start with a "bind source path
+      # does not exist" error. Create an empty directory as a placeholder.
+      - name: Create gh config placeholder
+        run: mkdir -p ~/.config/gh
+
       - name: Run build check in devcontainer
         uses: devcontainers/ci@v0.3
         env:
