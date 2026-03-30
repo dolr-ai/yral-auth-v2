@@ -1,0 +1,101 @@
+name: Build and Check linting
+
+on:
+  workflow_call:
+    inputs:
+      publish-artifact:
+        default: false
+        required: false
+        type: boolean
+  workflow_dispatch:
+
+jobs:
+  build_check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo and submodules
+        uses: actions/checkout@v3
+        with:
+          submodules: recursive
+
+      - name: Install mold linker
+        uses: rui314/setup-mold@v1
+
+      - name: Rust Setup
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+
+      - name: Install wasm-bindgen-cli
+        run: cargo install wasm-bindgen-cli --version 0.2.108
+
+      - uses: cargo-bins/cargo-binstall@main
+      - name: cargo-leptos setup
+        run: cargo binstall --no-confirm cargo-leptos --version 0.3.2
+
+      - name: Cache rust dependencies and build output
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: pnpm/action-setup@v3
+        name: Install pnpm
+        with:
+          version: 10
+          run_install: false
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - uses: actions/cache@v4
+        name: Setup pnpm cache
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install npm deps
+        run: pnpm install
+
+      - uses: awalsh128/cache-apt-pkgs-action@v1
+        with:
+          packages: musl-tools # provides musl-gcc
+          version: 1.0
+
+      - name: Lint check
+        run: |
+          cargo fmt --check
+          cargo clippy --no-deps --all-features --release -- -Dwarnings
+
+      - name: Run tests
+        run: cargo test --lib --features ssr,phone-auth
+        env:
+          DRAGONFLY_HOSTS: ${{ vars.DRAGONFLY_HOSTS }}
+          DRAGONFLY_PASSWORD: ${{ secrets.DRAGONFLY_PASSWORD }}
+          DRAGONFLY_CA_CERT: ${{ secrets.DRAGONFLY_CA_CERT }}
+          DRAGONFLY_CLIENT_CERT: ${{ secrets.DRAGONFLY_CLIENT_CERT }}
+          DRAGONFLY_CLIENT_KEY: ${{ secrets.DRAGONFLY_CLIENT_KEY }}
+
+      - name: Build the Leptos project to `musl` output
+        run: cargo leptos build --release --lib-features release-lib --bin-features release-bin
+        env:
+          LEPTOS_BIN_TARGET_TRIPLE: x86_64-unknown-linux-musl
+          LEPTOS_HASH_FILES: true
+          LEPTOS_TAILWIND_VERSION: v4.0.15
+
+      - run: touch .empty
+
+      - name: Archive production artifacts
+        uses: actions/upload-artifact@v4
+        if: ${{ inputs.publish-artifact }}
+        with:
+          name: build-musl
+          path: |
+            target/x86_64-unknown-linux-musl/release/yral-auth-v2
+            target/x86_64-unknown-linux-musl/release/hash.txt 
+            target/site
+            .empty
