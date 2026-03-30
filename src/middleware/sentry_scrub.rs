@@ -193,8 +193,10 @@ mod tests {
 
     #[test]
     fn test_scrub_request_query_string() {
-        let mut request = Request::default();
-        request.query_string = Some("code=abc123&state=xyz".to_string());
+        let request = Request {
+            query_string: Some("code=abc123&state=xyz".to_string()),
+            ..Default::default()
+        };
 
         let scrubbed = scrub_request(request);
         assert_eq!(scrubbed.query_string.unwrap(), REDACTED);
