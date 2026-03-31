@@ -80,6 +80,9 @@ jobs:
     name: Deploy to Hetzner (${{ matrix.host }})
     needs: build-and-push
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -89,10 +92,20 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Import SSH key from Vault
+        uses: hashicorp/vault-action@v3
+        with:
+          url: https://vault.yral.com
+          method: jwt
+          role: yral-auth-v2-role
+          jwtGithubAudience: "https://github.com/dolr-ai"
+          secrets: |
+            secret/data/yral-auth-v2/SSH_PRIVATE_KEY value | SSH_PRIVATE_KEY ;
+
       - name: Setup SSH key
         uses: webfactory/ssh-agent@v0.9.0
         with:
-          ssh-private-key: ${{ secrets.HETZNER_BARE_METAL_GITHUB_ACTIONS_SSH_PRIVATE_KEY }}
+          ssh-private-key: ${{ env.SSH_PRIVATE_KEY }}
 
       - name: Add server to known hosts
         run: |
@@ -100,7 +113,7 @@ jobs:
 
       - name: Check server connectivity
         run: |
-          ssh -o ConnectTimeout=10 root@${{ matrix.host }} "echo 'Server connection successful'"
+          ssh -o ConnectTimeout=10 yra-auth@${{ matrix.host }} "echo 'Server connection successful'"
       
       - name: Import Secrets from Vault
         uses: hashicorp/vault-action@v3
@@ -121,16 +134,18 @@ jobs:
             secret/data/DRAGONFLY_CLUSTER_1_CA_CERT value | DRAGONFLY_CA_CERT ;
             secret/data/DRAGONFLY_CLUSTER_1_CLIENT_CERT value | DRAGONFLY_CLIENT_CERT ;
             secret/data/DRAGONFLY_CLUSTER_1_CLIENT_KEY value | DRAGONFLY_CLIENT_KEY ;
+            secret/data/yral-metadata/SSH_PRIVATE_KEY value | SSH_PRIVATE_KEY ;
 
       - name: Sync deployment files to server
         run: |
           rsync -avz --delete \
+            --exclude='.ssh/' \
             ./deploy/ \
-            root@${{ matrix.host }}:/home/yral-auth/
+            yral-auth@${{ matrix.host }}:/home/yral-auth/
 
       - name: Log in to GitHub Container Registry on server
         run: |
-          ssh root@${{ matrix.host }} "
+          ssh yral-auth@${{ matrix.host }} "
             echo '${{ secrets.GITHUB_TOKEN }}' | docker login ghcr.io -u ${{ github.actor }} --password-stdin
           "
 
@@ -148,7 +163,7 @@ jobs:
           DRAGONFLY_CLIENT_CERT: ${{ env.DRAGONFLY_CLIENT_CERT }}
           DRAGONFLY_CLIENT_KEY: ${{ env.DRAGONFLY_CLIENT_KEY }}
         run: |
-          ssh root@${{ matrix.host }} "
+          ssh yral-auth@${{ matrix.host }} "
             cd /home/yral-auth
 
             echo 'Pulling latest images...'
@@ -184,7 +199,7 @@ jobs:
 
       - name: Verify deployment
         run: |
-          ssh root@${{ matrix.host }} "
+          ssh yral-auth@${{ matrix.host }} "
             cd /home/yral-auth
 
             echo '=== Container Status ==='
