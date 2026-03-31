@@ -113,7 +113,7 @@ jobs:
 
       - name: Check server connectivity
         run: |
-          ssh -o ConnectTimeout=10 root@${{ matrix.host }} "echo 'Server connection successful'"
+          ssh -o ConnectTimeout=10 yra-auth@${{ matrix.host }} "echo 'Server connection successful'"
       
       - name: Import Secrets from Vault
         uses: hashicorp/vault-action@v3
@@ -134,6 +134,7 @@ jobs:
             secret/data/DRAGONFLY_CLUSTER_1_CA_CERT value | DRAGONFLY_CA_CERT ;
             secret/data/DRAGONFLY_CLUSTER_1_CLIENT_CERT value | DRAGONFLY_CLIENT_CERT ;
             secret/data/DRAGONFLY_CLUSTER_1_CLIENT_KEY value | DRAGONFLY_CLIENT_KEY ;
+            secret/data/yral-metadata/SSH_PRIVATE_KEY value | SSH_PRIVATE_KEY ;
 
       - name: Sync deployment files to server
         run: |
