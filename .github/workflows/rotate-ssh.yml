@@ -45,7 +45,7 @@ jobs:
           IPS="${{ vars.HETZNER_HOSTS }}"
           NEW_PUB_KEY="${{ env.NEW_PUBLIC_KEY }}"
           for ip in $(echo "$IPS" | tr ',' ' '); do
-            ssh yral-autht@$ip "
+            ssh yral-auth@$ip "
               echo '$NEW_PUB_KEY' >> ~/.ssh/authorized_keys
               echo 'New key appended on $ip'
             "
