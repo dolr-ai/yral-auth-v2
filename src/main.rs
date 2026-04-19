@@ -74,7 +74,7 @@ fn setup_sentry_subscriber() {
 #[tokio::main]
 async fn main() {
     let _guard = sentry::init((
-        "https://12cd069502a3fdb82d39313b26689aee@apm.yral.com/3",
+        "https://c77631cc9b797bd2c9520d74bc08eaad@sentry.naitik.yral.com/3",
         sentry::ClientOptions {
             release: sentry::release_name!(),
             environment: Some(
