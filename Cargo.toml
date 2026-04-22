@@ -132,8 +132,6 @@ lto = true
 codegen-units = 1
 panic = "abort"
 
-[profile.release]
-debug = true
 
 [package.metadata.leptos]
 # The name used by wasm-bindgen/cargo-leptos for the JS/WASM bundle. Defaults to the crate name
