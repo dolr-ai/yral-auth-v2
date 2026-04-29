@@ -368,7 +368,9 @@ impl ServerCtx {
                 cookie_key,
                 jwk_pairs: JwkPairs::default(),
                 kv_store,
+                new_kv_store,
                 validator: ClientIdValidatorImpl::Const(Default::default()),
+                message_delivery_service,
             }
         }
     }
