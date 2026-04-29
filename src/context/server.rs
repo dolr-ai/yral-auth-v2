@@ -138,6 +138,7 @@ pub struct ServerCtx {
     pub cookie_key: axum_extra::extract::cookie::Key,
     pub jwk_pairs: JwkPairs,
     pub kv_store: KVStoreImpl,
+    pub new_kv_store: KVStoreImpl,
     pub validator: ClientIdValidatorImpl,
     #[cfg(feature = "phone-auth")]
     pub message_delivery_service: Box<dyn MessageDeliveryService>,
@@ -283,7 +284,26 @@ impl ServerCtx {
         axum_extra::extract::cookie::Key::from(&cookie_key_raw)
     }
 
-    pub async fn init_kv_store() -> KVStoreImpl {
+    pub async fn init_old_kv_store() -> KVStoreImpl {
+        #[cfg(not(feature = "redis-kv"))]
+        {
+            use crate::kv::redb_kv::ReDBKV;
+            KVStoreImpl::ReDB(ReDBKV::new().unwrap())
+        }
+        #[cfg(feature = "redis-kv")]
+        {
+            use crate::kv::dragonfly_kv::DragonflyKV;
+
+            log::info!("Initializing Dragonfly KV store");
+            KVStoreImpl::Dragonfly(
+                DragonflyKV::old()
+                    .await
+                    .expect("Failed to initialize RedisKV"),
+            )
+        }
+    }
+
+    pub async fn init_new_kv_store() -> KVStoreImpl {
         #[cfg(not(feature = "redis-kv"))]
         {
             use crate::kv::redb_kv::ReDBKV;
@@ -314,7 +334,8 @@ impl ServerCtx {
         let cookie_key = Self::init_cookie_key();
 
         //dragonfly redis kv store
-        let kv_store = Self::init_kv_store().await;
+        let kv_store = Self::init_old_kv_store().await;
+        let new_kv_store = Self::init_new_kv_store().await;
 
         #[cfg(feature = "phone-auth")]
         {
@@ -333,7 +354,8 @@ impl ServerCtx {
                 oauth_providers,
                 cookie_key,
                 jwk_pairs: JwkPairs::default(),
-                kv_store, //dragonfly redis kv store
+                kv_store, //old dragonfly redis kv store
+                new_kv_store, //new dragonfly redis kv store
                 validator: ClientIdValidatorImpl::Const(Default::default()),
                 message_delivery_service,
             }
