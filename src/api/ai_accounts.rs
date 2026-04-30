@@ -1,4 +1,4 @@
-use crate::api::ai_accounts::server_fn::codec::Json;
+use crate::{api::ai_accounts::server_fn::codec::Json, kv::dragonfly_kv::{KEY_PREFIX, format_to_dragonfly_key}};
 #[cfg(feature = "ssr")]
 use crate::{context::server::ServerCtx, kv::KVStore, utils::time::current_epoch};
 use candid::Principal;
@@ -6,7 +6,7 @@ use ic_agent::{
     identity::{Delegation, Secp256k1Identity, SignedDelegation},
     Identity,
 };
-use leptos::prelude::*;
+use leptos::{form, prelude::*};
 use serde::{Deserialize, Serialize};
 use web_time::Duration;
 use yral_identity::msg_builder::Message;
@@ -123,16 +123,31 @@ pub async fn create_ai_account(
     let ai_secret_jwk = ai_secret.to_jwk_string().to_string();
 
     let key = ai_account_key(&main_principal, slot);
-    if let Err(e) = ctx.kv_store.write(key, ai_secret_jwk).await {
+    let formatted_key = format_to_dragonfly_key(KEY_PREFIX, &key);
+    if let Err(e) = ctx.kv_store.write(key, ai_secret_jwk.clone()).await {
+        return Err(ServerFnError::new(format!("Storage error: {}", e)));
+    }
+
+    if let Err(e) = ctx.new_kv_store.write(formatted_key, ai_secret_jwk).await {
         return Err(ServerFnError::new(format!("Storage error: {}", e)));
     }
 
     let ai_identity = Secp256k1Identity::from_private_key(ai_secret.clone());
     let ai_account_principal = ai_identity.sender().unwrap();
     let reverse_key = ai_account_reverse_lookup_key(&ai_account_principal);
+    let formatted_reverse_key = format_to_dragonfly_key(KEY_PREFIX, &reverse_key);
     if let Err(e) = ctx
         .kv_store
         .write(reverse_key, main_principal.to_text())
+        .await
+    {
+        return Err(ServerFnError::new(format!("Storage error: {}", e)));
+    }
+
+
+    if let Err(e) = ctx
+        .new_kv_store
+        .write(formatted_reverse_key, main_principal.to_text())
         .await
     {
         return Err(ServerFnError::new(format!("Storage error: {}", e)));
