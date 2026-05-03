@@ -232,7 +232,7 @@ impl ServerCtx {
 
         let mut metadata = http_client
             .get(well_known_url)
-            .header(ACCEPT, "appplication/json")
+            .header(ACCEPT, "application/json")
             .send()
             .await
             .map_err(|e| format!("{e}"))?
