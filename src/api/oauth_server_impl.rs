@@ -98,6 +98,15 @@ pub async fn get_oauth_url_impl(
         }
     };
 
+    #[cfg(feature = "apple-oauth")]
+    let authorize_builder = {
+        if provider == SupportedOAuthProviders::Apple {
+            authorize_builder.add_extra_param("response_mode", "query")
+        } else {
+            authorize_builder
+        }
+    };
+
     #[cfg(not(feature = "google-oauth"))]
     let authorize_builder = authorize_builder;
 
