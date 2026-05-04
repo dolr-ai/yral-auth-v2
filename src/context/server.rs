@@ -18,6 +18,10 @@ use openidconnect::core::CoreJsonWebKeySet;
 #[cfg(feature = "google-oauth")]
 use openidconnect::ClientSecret;
 use p256::pkcs8::DecodePublicKey;
+#[cfg(feature = "apple-oauth")]
+use p256::pkcs8::{DecodePrivateKey, EncodePublicKey};
+#[cfg(feature = "apple-oauth")]
+use sha2::{Digest, Sha256};
 
 #[cfg(feature = "phone-auth")]
 use crate::context::message_delivery_service::MessageDeliveryService;
@@ -213,18 +217,47 @@ impl ServerCtx {
     }
 
     #[cfg(feature = "apple-oauth")]
+    fn apple_auth_key_public_fingerprint(pem: &str) -> Result<String, String> {
+        let secret_key = p256::SecretKey::from_pkcs8_pem(pem)
+            .map_err(|e| format!("failed to parse Apple private key for diagnostics: {e}"))?;
+        let public_key_der = secret_key
+            .public_key()
+            .to_public_key_der()
+            .map_err(|e| format!("failed to derive Apple public key for diagnostics: {e}"))?;
+        let digest = Sha256::digest(public_key_der.as_bytes());
+        Ok(hex::encode(digest))
+    }
+
+    #[cfg(feature = "apple-oauth")]
     async fn init_apple_oauth_client(
         http_client: &reqwest::Client,
         oauth_providers: &mut HashMap<SupportedOAuthProviders, OAuthProviderImpl>,
     ) -> Result<(), String> {
         let apple_team_id = env::var("APPLE_TEAM_ID").expect("`APPLE_TEAM_ID` is required!");
         let apple_key_id = env::var("APPLE_KEY_ID").expect("`APPLE_KEY_ID` is required!");
-        let apple_auth_key =
+        let apple_auth_key_pem =
             env::var("APPLE_AUTH_KEY_PEM").expect("`APPLE_AUTH_KEY_PEM` is required!");
-        let apple_auth_key = jsonwebtoken::EncodingKey::from_ec_pem(apple_auth_key.as_bytes())
+
+        match Self::apple_auth_key_public_fingerprint(&apple_auth_key_pem) {
+            Ok(fingerprint) => log::info!(
+                "Apple OAuth key diagnostics: key_id={}, public_key_spki_sha256={}, runtime_epoch={}",
+                apple_key_id,
+                fingerprint,
+                crate::utils::time::current_epoch().as_secs()
+            ),
+            Err(e) => log::error!("Apple OAuth key diagnostics failed: {e}"),
+        }
+
+        let apple_auth_key = jsonwebtoken::EncodingKey::from_ec_pem(apple_auth_key_pem.as_bytes())
             .expect("invalid `APPLE_AUTH_KEY_PEM`");
 
         let client_id = env::var("APPLE_CLIENT_ID").expect("`APPLE_CLIENT_ID` is required!");
+        log::info!(
+            "Apple OAuth config diagnostics: client_id={}, team_id={}, key_id={}",
+            client_id,
+            apple_team_id,
+            apple_key_id
+        );
 
         let iss = IssuerUrl::new(APPLE_ISSUER_URL.to_string()).unwrap();
 
