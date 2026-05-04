@@ -85,8 +85,14 @@ pub async fn get_oauth_url_impl(
             move || CsrfToken::new(oauth_state_b64),
             Nonce::new_random,
         )
-        .set_redirect_uri(Cow::Owned(redirect_uri))
-        .set_pkce_challenge(pkce_challenge);
+        .set_redirect_uri(Cow::Owned(redirect_uri));
+
+    let authorize_builder = if provider != SupportedOAuthProviders::Apple {
+        authorize_builder.set_pkce_challenge(pkce_challenge)
+    } else {
+        // Apple doesn't support PKCE, so we skip setting the challenge
+        authorize_builder
+    };
 
     #[cfg(feature = "google-oauth")]
     let authorize_builder = {
@@ -244,14 +250,22 @@ async fn generate_oauth_login_code(
         })?;
 
     log::info!("Exchanging code with redirect URI: {}", redirect_uri.as_str());
-    let token_res = oauth2
+    let exchange = oauth2
         .exchange_code(AuthorizationCode::new(code))
         .map_err(|e| {
             log::error!("Exchange code failed (sync): {}", e);
             AuthErrorKind::unexpected(e)
         })?
-        .set_redirect_uri(Cow::Owned(redirect_uri))
-        .set_pkce_verifier(pkce_verifier)
+        .set_redirect_uri(Cow::Owned(redirect_uri));
+
+    let exchange = if provider != SupportedOAuthProviders::Apple {
+        exchange.set_pkce_verifier(pkce_verifier)
+    } else {
+        // Apple doesn't support PKCE, so we skip setting the verifier
+        exchange
+    };
+
+    let token_res = exchange
         .request_async(&ctx.oauth_http_client)
         .await
         .map_err(|e| {
