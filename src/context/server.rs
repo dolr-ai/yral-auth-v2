@@ -7,7 +7,7 @@ use base64::{prelude::BASE64_URL_SAFE_NO_PAD, Engine};
 use jsonwebtoken::jwk::{self, Jwk};
 use leptos::{config::LeptosOptions, prelude::expect_context};
 use leptos_axum::AxumRouteListing;
-use openidconnect::{core::CoreClient, reqwest, ClientId, IssuerUrl, RedirectUrl};
+use openidconnect::{core::CoreClient, reqwest, AuthUrl, ClientId, IssuerUrl, RedirectUrl, TokenUrl};
 
 #[cfg(any(feature = "google-oauth", feature = "apple-oauth"))]
 use openidconnect::core::CoreProviderMetadata;
@@ -275,7 +275,21 @@ impl ServerCtx {
         let jwks = CoreJsonWebKeySet::fetch_async(metadata.jwks_uri(), http_client)
             .await
             .map_err(|e| format!("{e}"))?;
-        metadata = metadata.set_jwks(jwks);
+
+        metadata = metadata
+            .set_jwks(jwks)
+            .set_authorization_endpoint(
+                AuthUrl::new("https://appleid.apple.com/auth/authorize".to_string()).unwrap(),
+            )
+            .set_token_endpoint(Some(
+                TokenUrl::new("https://appleid.apple.com/auth/token".to_string()).unwrap(),
+            ));
+
+        log::info!(
+            "Apple provider endpoint override: authorization_endpoint={}, token_endpoint={:?}",
+            metadata.authorization_endpoint().url().as_str(),
+            metadata.token_endpoint().map(|url| url.url().as_str())
+        );
 
         log::info!(
             "Apple provider metadata diagnostics: issuer={}, authorization_endpoint={:?}, token_endpoint={:?}, jwks_uri={}",
