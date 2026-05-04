@@ -118,6 +118,25 @@ pub async fn get_oauth_url_impl(
 
     let (auth_url, oauth_csrf_token, _) = authorize_builder.url();
 
+    #[cfg(feature = "apple-oauth")]
+    if provider == SupportedOAuthProviders::Apple {
+        let params: std::collections::HashMap<_, _> = auth_url.query_pairs().into_owned().collect();
+        log::info!(
+            "Apple authorize URL diagnostics: scheme={}, host={:?}, path={}, client_id={:?}, redirect_uri={:?}, response_type={:?}, response_mode={:?}, scope={:?}, code_challenge_present={}, code_challenge_method={:?}, state_present={}",
+            auth_url.scheme(),
+            auth_url.host_str(),
+            auth_url.path(),
+            params.get("client_id"),
+            params.get("redirect_uri"),
+            params.get("response_type"),
+            params.get("response_mode"),
+            params.get("scope"),
+            params.contains_key("code_challenge"),
+            params.get("code_challenge_method"),
+            params.contains_key("state")
+        );
+    }
+
     let mut jar: PrivateCookieJar = extract_with_state(&ctx.cookie_key).await?;
 
     let cookie_life = Duration::from_secs(60 * 10).try_into().unwrap(); // 10 minutes
