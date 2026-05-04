@@ -118,25 +118,6 @@ pub async fn get_oauth_url_impl(
 
     let (auth_url, oauth_csrf_token, _) = authorize_builder.url();
 
-    #[cfg(feature = "apple-oauth")]
-    if provider == SupportedOAuthProviders::Apple {
-        let params: std::collections::HashMap<_, _> = auth_url.query_pairs().into_owned().collect();
-        log::info!(
-            "Apple authorize URL diagnostics: scheme={}, host={:?}, path={}, client_id={:?}, redirect_uri={:?}, response_type={:?}, response_mode={:?}, scope={:?}, code_challenge_present={}, code_challenge_method={:?}, state_present={}",
-            auth_url.scheme(),
-            auth_url.host_str(),
-            auth_url.path(),
-            params.get("client_id"),
-            params.get("redirect_uri"),
-            params.get("response_type"),
-            params.get("response_mode"),
-            params.get("scope"),
-            params.contains_key("code_challenge"),
-            params.get("code_challenge_method"),
-            params.contains_key("state")
-        );
-    }
-
     let mut jar: PrivateCookieJar = extract_with_state(&ctx.cookie_key).await?;
 
     let cookie_life = Duration::from_secs(60 * 10).try_into().unwrap(); // 10 minutes
@@ -256,25 +237,15 @@ async fn generate_oauth_login_code(
     let oauth_impl = ctx
         .oauth_providers
         .get(&provider)
-        .ok_or_else(|| {
-            log::error!("OAuth provider {} not found in ctx", provider);
-            AuthErrorKind::unexpected(format!("provider unavailable: {provider}"))
-        })?;
+        .ok_or_else(|| AuthErrorKind::unexpected(format!("provider unavailable: {provider}")))?;
     let oauth2 = oauth_impl.get_client();
 
     let redirect_uri = RedirectUrl::new(format!("{server_url}/oauth_callback"))
-        .map_err(|e| {
-            log::error!("Invalid redirect URI: {}", e);
-            AuthErrorKind::unexpected(e.to_string())
-        })?;
+        .map_err(|e| AuthErrorKind::unexpected(e.to_string()))?;
 
-    log::info!("Exchanging code with redirect URI: {}", redirect_uri.as_str());
     let exchange = oauth2
         .exchange_code(AuthorizationCode::new(code))
-        .map_err(|e| {
-            log::error!("Exchange code failed (sync): {}", e);
-            AuthErrorKind::unexpected(e)
-        })?
+        .map_err(|e| AuthErrorKind::unexpected(e))?
         .set_redirect_uri(Cow::Owned(redirect_uri));
 
     let exchange = if provider != SupportedOAuthProviders::Apple {
@@ -295,10 +266,7 @@ async fn generate_oauth_login_code(
     let id_token = token_res
         .extra_fields()
         .id_token()
-        .ok_or_else(|| {
-            log::error!("ID token missing in response from {}", provider);
-            AuthErrorKind::unexpected("Provider did not return an ID token")
-        })?;
+        .ok_or_else(|| AuthErrorKind::unexpected("Provider did not return an ID token"))?;
 
     // we don't use a nonce
     let claims = oauth_impl.verify_id_token(&oauth2, id_token).map_err(|e| {
@@ -307,8 +275,6 @@ async fn generate_oauth_login_code(
     })?;
     let sub_id = claims.subject();
     let email = claims.email().map(|e| String::from(e.clone()));
-
-    log::info!("ID token verified for subject: {}, email: {:?}", sub_id.as_str(), email);
 
     let maybe_principal =
         try_extract_principal_from_oauth_sub(provider, &ctx.kv_store, sub_id, email.as_deref())
@@ -319,10 +285,7 @@ async fn generate_oauth_login_code(
             })?;
     let principal = if let Some(principal_str) = maybe_principal {
         Principal::from_text(principal_str)
-            .map_err(|_| {
-                log::error!("Invalid principal stored in KV for subject: {}", sub_id.as_str());
-                AuthErrorKind::unexpected("Invalid principal from KV")
-            })?
+            .map_err(|_| AuthErrorKind::unexpected("Invalid principal from KV"))?
     } else {
         principal_from_login_hint_or_generate_and_save(
             provider,
@@ -334,12 +297,10 @@ async fn generate_oauth_login_code(
         .await?
     };
 
-    let server_url = get_server_url_from_request()
-        .await
-        .map_err(|e| {
-            log::error!("Failed to get server url for code_grant: {}", e);
-            AuthErrorKind::Unexpected(e.to_string())
-        })?;
+    let server_url = get_server_url_from_request().await.map_err(|e| {
+        log::error!("Failed to get server url for code_grant: {}", e);
+        AuthErrorKind::Unexpected(e.to_string())
+    })?;
 
     let code_grant = generate_code_grant_jwt(
         &ctx.jwk_pairs.auth_tokens.encoding_key,
@@ -356,7 +317,6 @@ pub async fn perform_oauth_login_impl(
     code: String,
     state: String,
 ) -> Result<String, ServerFnError> {
-    log::info!("perform_oauth_login_impl started");
     let ctx = expect_server_ctx();
     let mut jar: PrivateCookieJar = extract_with_state(&ctx.cookie_key).await.map_err(|e| {
         log::error!("Failed to extract jar: {}", e);
@@ -369,21 +329,14 @@ pub async fn perform_oauth_login_impl(
 
     let csrf_cookie = jar
         .get(CSRF_TOKEN_COOKIE)
-        .ok_or_else(|| {
-            log::error!("CSRF token cookie not found. Could be due to missing SameSite/Secure attributes across redirect");
-            ServerFnError::new("csrf token not found")
-        })?;
+        .ok_or_else(|| ServerFnError::new("csrf token not found"))?;
     if state != csrf_cookie.value() {
-        log::error!("CSRF token mismatch. Received state: {}, Cookie: {}", state, csrf_cookie.value());
         return Err(ServerFnError::new("CSRF token mismatch"));
     }
 
     let pkce_cookie = jar
         .get(PKCE_VERIFIER_COOKIE)
-        .ok_or_else(|| {
-            log::error!("PKCE verifier cookie not found");
-            ServerFnError::new("pkce verifier not found")
-        })?;
+        .ok_or_else(|| ServerFnError::new("pkce verifier not found"))?;
     let pkce_verifier = PkceCodeVerifier::new(pkce_cookie.value().to_owned());
 
     jar = jar.remove(PKCE_VERIFIER_COOKIE);
@@ -393,51 +346,32 @@ pub async fn perform_oauth_login_impl(
 
     let state_raw = BASE64_URL_SAFE
         .decode(&state)
-        .map_err(|e| {
-            log::error!("Failed to decode base64 state: {}", e);
-            ServerFnError::new("failed to decode state")
-        })?;
+        .map_err(|_| ServerFnError::new("failed to decode state"))?;
     let state: OAuthState = postcard::from_bytes(&state_raw)
-        .map_err(|e| {
-            log::error!("Failed to deserialize state: {}", e);
-            ServerFnError::new("failed to deserialize state")
-        })?;
+        .map_err(|_| ServerFnError::new("failed to deserialize state"))?;
     let query_raw = BASE64_URL_SAFE
         .decode(&state.client_state)
-        .map_err(|e| {
-            log::error!("Failed to decode base64 client_state: {}", e);
-            ServerFnError::new("failed to decode client state")
-        })?;
+        .map_err(|_| ServerFnError::new("failed to decode client state"))?;
 
     let query: AuthQuery = postcard::from_bytes(&query_raw)
-        .map_err(|e| {
-            log::error!("Failed to deserialize query: {}", e);
-            ServerFnError::new("failed to deserialize query")
-        })?;
+        .map_err(|_| ServerFnError::new("failed to deserialize query"))?;
     let req_state = query.state.clone();
     let mut redirect_uri = query.redirect_uri.clone();
-
-    log::info!("Successfully validated cookies, generating oauth login code for provider: {}", state.provider);
 
     let res =
         generate_oauth_login_code(code, pkce_verifier, state.provider, query, server_url).await;
     match res {
-        Ok(grant) => {
-            log::info!("OAuth login successful, redirecting to callback");
-            redirect_uri
-                .query_pairs_mut()
-                .clear()
-                .append_pair("code", &grant)
-                .append_pair("state", &req_state)
-        }
-        Err(e) => {
-            log::error!("Failed to generate oauth login code: {}", e);
-            redirect_uri
-                .query_pairs_mut()
-                .clear()
-                .append_pair("error", &e.to_string())
-                .append_pair("state", &req_state)
-        }
+        Ok(grant) => redirect_uri
+            .query_pairs_mut()
+            .clear()
+            .append_pair("code", &grant)
+            .append_pair("state", &req_state),
+
+        Err(e) => redirect_uri
+            .query_pairs_mut()
+            .clear()
+            .append_pair("error", &e.to_string())
+            .append_pair("state", &req_state),
     };
 
     Ok(redirect_uri.to_string())

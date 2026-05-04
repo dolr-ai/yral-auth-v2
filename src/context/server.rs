@@ -7,7 +7,9 @@ use base64::{prelude::BASE64_URL_SAFE_NO_PAD, Engine};
 use jsonwebtoken::jwk::{self, Jwk};
 use leptos::{config::LeptosOptions, prelude::expect_context};
 use leptos_axum::AxumRouteListing;
-use openidconnect::{core::CoreClient, reqwest, AuthUrl, ClientId, IssuerUrl, RedirectUrl, TokenUrl};
+use openidconnect::{
+    core::CoreClient, reqwest, AuthUrl, ClientId, IssuerUrl, RedirectUrl, TokenUrl,
+};
 
 #[cfg(any(feature = "google-oauth", feature = "apple-oauth"))]
 use openidconnect::core::CoreProviderMetadata;
@@ -217,18 +219,6 @@ impl ServerCtx {
     }
 
     #[cfg(feature = "apple-oauth")]
-    fn apple_auth_key_public_fingerprint(pem: &str) -> Result<String, String> {
-        let secret_key = p256::SecretKey::from_pkcs8_pem(pem)
-            .map_err(|e| format!("failed to parse Apple private key for diagnostics: {e}"))?;
-        let public_key_der = secret_key
-            .public_key()
-            .to_public_key_der()
-            .map_err(|e| format!("failed to derive Apple public key for diagnostics: {e}"))?;
-        let digest = Sha256::digest(public_key_der.as_bytes());
-        Ok(hex::encode(digest))
-    }
-
-    #[cfg(feature = "apple-oauth")]
     async fn init_apple_oauth_client(
         http_client: &reqwest::Client,
         oauth_providers: &mut HashMap<SupportedOAuthProviders, OAuthProviderImpl>,
@@ -238,26 +228,10 @@ impl ServerCtx {
         let apple_auth_key_pem =
             env::var("APPLE_AUTH_KEY_PEM").expect("`APPLE_AUTH_KEY_PEM` is required!");
 
-        match Self::apple_auth_key_public_fingerprint(&apple_auth_key_pem) {
-            Ok(fingerprint) => log::info!(
-                "Apple OAuth key diagnostics: key_id={}, public_key_spki_sha256={}, runtime_epoch={}",
-                apple_key_id,
-                fingerprint,
-                crate::utils::time::current_epoch().as_secs()
-            ),
-            Err(e) => log::error!("Apple OAuth key diagnostics failed: {e}"),
-        }
-
         let apple_auth_key = jsonwebtoken::EncodingKey::from_ec_pem(apple_auth_key_pem.as_bytes())
             .expect("invalid `APPLE_AUTH_KEY_PEM`");
 
         let client_id = env::var("APPLE_CLIENT_ID").expect("`APPLE_CLIENT_ID` is required!");
-        log::info!(
-            "Apple OAuth config diagnostics: client_id={}, team_id={}, key_id={}",
-            client_id,
-            apple_team_id,
-            apple_key_id
-        );
 
         let iss = IssuerUrl::new(APPLE_ISSUER_URL.to_string()).unwrap();
 
@@ -284,20 +258,6 @@ impl ServerCtx {
             .set_token_endpoint(Some(
                 TokenUrl::new("https://appleid.apple.com/auth/token".to_string()).unwrap(),
             ));
-
-        log::info!(
-            "Apple provider endpoint override: authorization_endpoint={}, token_endpoint={:?}",
-            metadata.authorization_endpoint().url().as_str(),
-            metadata.token_endpoint().map(|url| url.url().as_str())
-        );
-
-        log::info!(
-            "Apple provider metadata diagnostics: issuer={}, authorization_endpoint={:?}, token_endpoint={:?}, jwks_uri={}",
-            metadata.issuer().as_str(),
-            metadata.authorization_endpoint().url().as_str(),
-            metadata.token_endpoint().map(|url| url.url().as_str()),
-            metadata.jwks_uri().as_str()
-        );
 
         let apple_oauth =
             CoreClient::from_provider_metadata(metadata, ClientId::new(client_id), None)
