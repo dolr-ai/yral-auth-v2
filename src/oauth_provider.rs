@@ -327,17 +327,6 @@ impl AppleClientSecretGen {
         token_header.kid = Some(self.key_id.clone());
         token_header.typ = None;
 
-        log::info!(
-            "Apple client secret JWT diagnostics: alg=ES256, kid={}, typ=None, iss={}, sub={}, aud={}, iat={}, exp={}, runtime_epoch={}",
-            self.key_id,
-            claims.iss,
-            claims.sub,
-            claims.aud,
-            claims.iat,
-            claims.exp,
-            current_epoch().as_secs()
-        );
-
         let token = jsonwebtoken::encode(&token_header, &claims, &self.auth_key)
             .expect("Failed to encode Apple client secret?!");
 
@@ -358,7 +347,6 @@ impl AppleOAuthProvider {
         team_id: String,
     ) -> Self {
         let client_id = base_client.client_id().to_string();
-        log::info!("Initializing AppleOAuthProvider with client_id: {client_id}, team_id: {team_id}, key_id: {key_id}");
         let keygen = AppleClientSecretGen::new(auth_key, key_id, team_id, client_id);
         let (client_secret, expiry_epoch) = keygen.generate_client_secret();
         let client = base_client.set_client_secret(client_secret);
@@ -381,11 +369,6 @@ impl OAuthProvider for AppleOAuthProvider {
         if cur_epoch < cur_exp {
             return self.cache.read().unwrap().clone();
         }
-
-        log::info!(
-            "Refreshing Apple client secret JWT: runtime_epoch={}, previous_cached_expiry={}",
-            cur_epoch, cur_exp
-        );
 
         let mut cache = self.cache.write().unwrap();
         let (client_secret, expiry_epoch) = self.keygen.generate_client_secret();
