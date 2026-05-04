@@ -277,6 +277,14 @@ impl ServerCtx {
             .map_err(|e| format!("{e}"))?;
         metadata = metadata.set_jwks(jwks);
 
+        log::info!(
+            "Apple provider metadata diagnostics: issuer={}, authorization_endpoint={:?}, token_endpoint={:?}, jwks_uri={}",
+            metadata.issuer().as_str(),
+            metadata.authorization_endpoint().url().as_str(),
+            metadata.token_endpoint().map(|url| url.url().as_str()),
+            metadata.jwks_uri().as_str()
+        );
+
         let apple_oauth =
             CoreClient::from_provider_metadata(metadata, ClientId::new(client_id), None)
                 .set_auth_type(openidconnect::AuthType::RequestBody);
