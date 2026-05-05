@@ -74,7 +74,11 @@ pub async fn get_oauth_url_impl(
         .map_err(|_| ServerFnError::new("failed to serialize oauth state"))?;
     let oauth_state_b64 = BASE64_URL_SAFE.encode(oauth_state_raw);
 
-    let server_url = get_server_url_from_request().await?;
+    let server_url = get_server_url_from_request().await.map_err(|e| {
+        let err_msg = format!("failed to get server url: {:?}", e);
+        sentry::capture_message(&err_msg, sentry::Level::Error);
+        e
+    })?;
 
     let redirect_uri = RedirectUrl::new(format!("{server_url}/oauth_callback"))
         .map_err(|e| ServerFnError::new(e.to_string()))?;
@@ -118,7 +122,11 @@ pub async fn get_oauth_url_impl(
 
     let (auth_url, oauth_csrf_token, _) = authorize_builder.url();
 
-    let mut jar: PrivateCookieJar = extract_with_state(&ctx.cookie_key).await?;
+    let mut jar: PrivateCookieJar = extract_with_state(&ctx.cookie_key).await.map_err(|e| {
+        let err_msg = format!("failed to extract cookie jar: {:?}", e);
+        sentry::capture_message(&err_msg, sentry::Level::Error);
+        e
+    })?;
 
     let cookie_life = Duration::from_secs(60 * 10).try_into().unwrap(); // 10 minutes
     let pkce_cookie = Cookie::build((PKCE_VERIFIER_COOKIE, pkce_verifier.secret().clone()))
@@ -320,23 +328,35 @@ pub async fn perform_oauth_login_impl(
     let ctx = expect_server_ctx();
     let mut jar: PrivateCookieJar = extract_with_state(&ctx.cookie_key).await.map_err(|e| {
         log::error!("Failed to extract jar: {}", e);
+        sentry::capture_message(&format!("Failed to extract jar: {}", e), sentry::Level::Error);
         e
     })?;
     let server_url = get_server_url_from_request().await.map_err(|e| {
         log::error!("Failed to get server url: {}", e);
+        sentry::capture_message(&format!("Failed to get server url: {}", e), sentry::Level::Error);
         e
     })?;
 
     let csrf_cookie = jar
         .get(CSRF_TOKEN_COOKIE)
-        .ok_or_else(|| ServerFnError::new("csrf token not found"))?;
+        .ok_or_else(|| {
+            let err_msg = "csrf token not found";
+            sentry::capture_message(err_msg, sentry::Level::Error);
+            ServerFnError::new(err_msg)
+        })?;
     if state != csrf_cookie.value() {
-        return Err(ServerFnError::new("CSRF token mismatch"));
+        let err_msg = "CSRF token mismatch";
+        sentry::capture_message(err_msg, sentry::Level::Error);
+        return Err(ServerFnError::new(err_msg));
     }
 
     let pkce_cookie = jar
         .get(PKCE_VERIFIER_COOKIE)
-        .ok_or_else(|| ServerFnError::new("pkce verifier not found"))?;
+        .ok_or_else(|| {
+            let err_msg = "pkce verifier not found";
+            sentry::capture_message(err_msg, sentry::Level::Error);
+            ServerFnError::new(err_msg)
+        })?;
     let pkce_verifier = PkceCodeVerifier::new(pkce_cookie.value().to_owned());
 
     jar = jar.remove(PKCE_VERIFIER_COOKIE);
@@ -367,11 +387,15 @@ pub async fn perform_oauth_login_impl(
             .append_pair("code", &grant)
             .append_pair("state", &req_state),
 
-        Err(e) => redirect_uri
+        Err(e) => {
+            let err_msg = e.to_string();
+            sentry::capture_message(&format!("OAuth login failed: {}", err_msg), sentry::Level::Error);
+            redirect_uri
             .query_pairs_mut()
             .clear()
             .append_pair("error", &e.to_string())
-            .append_pair("state", &req_state),
+            .append_pair("state", &req_state)
+        }
     };
 
     Ok(redirect_uri.to_string())
