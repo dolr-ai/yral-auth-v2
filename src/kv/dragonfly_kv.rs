@@ -61,19 +61,22 @@ pub fn get_client_key_pem() -> Result<Vec<u8>, anyhow::Error> {
 
 pub fn get_new_ca_cert_pem() -> Result<Vec<u8>, anyhow::Error> {
     Ok(normalize_pem(
-        std::env::var("DRAGONFLY_REDIS_STORE_CA_CERT").expect("DRAGONFLY_REDIS_STORE_CA_CERT env var not set"),
+        std::env::var("DRAGONFLY_REDIS_STORE_CA_CERT")
+            .expect("DRAGONFLY_REDIS_STORE_CA_CERT env var not set"),
     ))
 }
 
 pub fn get_new_client_cert_pem() -> Result<Vec<u8>, anyhow::Error> {
     Ok(normalize_pem(
-        std::env::var("DRAGONFLY_REDIS_STORE_CLIENT_CERT").expect("DRAGONFLY_REDIS_STORE_CLIENT_CERT env var not set"),
+        std::env::var("DRAGONFLY_REDIS_STORE_CLIENT_CERT")
+            .expect("DRAGONFLY_REDIS_STORE_CLIENT_CERT env var not set"),
     ))
 }
 
 pub fn get_new_client_key_pem() -> Result<Vec<u8>, anyhow::Error> {
     Ok(normalize_pem(
-        std::env::var("DRAGONFLY_REDIS_STORE_CLIENT_KEY").expect("DRAGONFLY_REDIS_STORE_CLIENT_KEY env var not set"),
+        std::env::var("DRAGONFLY_REDIS_STORE_CLIENT_KEY")
+            .expect("DRAGONFLY_REDIS_STORE_CLIENT_KEY env var not set"),
     ))
 }
 
@@ -285,9 +288,11 @@ impl SentinelConnectionManager {
         Ok(client)
     }
 
-    pub async fn start_failover_listener(self: Arc<Self>, tls_certs: redis::TlsCertificates) {
-        let hosts = get_hosts_from_env();
-
+    pub async fn start_failover_listener(
+        self: Arc<Self>,
+        hosts: Vec<String>,
+        tls_certs: redis::TlsCertificates,
+    ) {
         if hosts.is_empty() {
             tracing::error!("No Sentinel hosts configured, failover listener disabled");
             return;
@@ -483,9 +488,10 @@ pub async fn init_old_dragonfly_redis(
     // Start failover listener
     let conn_man_for_listener = conn_man_arc.clone();
     let tls_certs_for_listener = tls_certs.clone();
+    let hosts_for_listener = hosts.clone();
     tokio::spawn(async move {
         conn_man_for_listener
-            .start_failover_listener(tls_certs_for_listener)
+            .start_failover_listener(hosts_for_listener, tls_certs_for_listener)
             .await;
     });
 
@@ -545,9 +551,10 @@ pub async fn init_new_dragonfly_redis(
     // Start failover listener
     let conn_man_for_listener = conn_man_arc.clone();
     let tls_certs_for_listener = tls_certs.clone();
+    let hosts_for_listener = hosts.clone();
     tokio::spawn(async move {
         conn_man_for_listener
-            .start_failover_listener(tls_certs_for_listener)
+            .start_failover_listener(hosts_for_listener, tls_certs_for_listener)
             .await;
     });
 
@@ -602,9 +609,10 @@ pub async fn init_dragonfly_redis_for_test() -> Result<Arc<DragonflyPool>, KVErr
     // Start failover listener
     let conn_man_for_listener = conn_man_arc.clone();
     let tls_certs_for_listener = tls_certs.clone();
+    let hosts_for_listener = hosts.clone();
     tokio::spawn(async move {
         conn_man_for_listener
-            .start_failover_listener(tls_certs_for_listener)
+            .start_failover_listener(hosts_for_listener, tls_certs_for_listener)
             .await;
     });
 
