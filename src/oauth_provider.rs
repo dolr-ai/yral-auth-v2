@@ -346,12 +346,8 @@ impl AppleOAuthProvider {
         key_id: String,
         team_id: String,
     ) -> Self {
-        let keygen = AppleClientSecretGen::new(
-            auth_key,
-            key_id,
-            team_id,
-            base_client.client_id().to_string(),
-        );
+        let client_id = base_client.client_id().to_string();
+        let keygen = AppleClientSecretGen::new(auth_key, key_id, team_id, client_id);
         let (client_secret, expiry_epoch) = keygen.generate_client_secret();
         let client = base_client.set_client_secret(client_secret);
         let cache = RwLock::new(Arc::new(client));

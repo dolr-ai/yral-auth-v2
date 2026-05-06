@@ -7,7 +7,9 @@ use base64::{prelude::BASE64_URL_SAFE_NO_PAD, Engine};
 use jsonwebtoken::jwk::{self, Jwk};
 use leptos::{config::LeptosOptions, prelude::expect_context};
 use leptos_axum::AxumRouteListing;
-use openidconnect::{core::CoreClient, reqwest, ClientId, IssuerUrl, RedirectUrl};
+use openidconnect::{
+    core::CoreClient, reqwest, AuthUrl, ClientId, IssuerUrl, RedirectUrl, TokenUrl,
+};
 
 #[cfg(any(feature = "google-oauth", feature = "apple-oauth"))]
 use openidconnect::core::CoreProviderMetadata;
@@ -18,6 +20,10 @@ use openidconnect::core::CoreJsonWebKeySet;
 #[cfg(feature = "google-oauth")]
 use openidconnect::ClientSecret;
 use p256::pkcs8::DecodePublicKey;
+#[cfg(feature = "apple-oauth")]
+use p256::pkcs8::{DecodePrivateKey, EncodePublicKey};
+#[cfg(feature = "apple-oauth")]
+use sha2::{Digest, Sha256};
 
 #[cfg(feature = "phone-auth")]
 use crate::context::message_delivery_service::MessageDeliveryService;
@@ -220,9 +226,10 @@ impl ServerCtx {
     ) -> Result<(), String> {
         let apple_team_id = env::var("APPLE_TEAM_ID").expect("`APPLE_TEAM_ID` is required!");
         let apple_key_id = env::var("APPLE_KEY_ID").expect("`APPLE_KEY_ID` is required!");
-        let apple_auth_key =
+        let apple_auth_key_pem =
             env::var("APPLE_AUTH_KEY_PEM").expect("`APPLE_AUTH_KEY_PEM` is required!");
-        let apple_auth_key = jsonwebtoken::EncodingKey::from_ec_pem(apple_auth_key.as_bytes())
+
+        let apple_auth_key = jsonwebtoken::EncodingKey::from_ec_pem(apple_auth_key_pem.as_bytes())
             .expect("invalid `APPLE_AUTH_KEY_PEM`");
 
         let client_id = env::var("APPLE_CLIENT_ID").expect("`APPLE_CLIENT_ID` is required!");
@@ -233,7 +240,7 @@ impl ServerCtx {
 
         let mut metadata = http_client
             .get(well_known_url)
-            .header(ACCEPT, "appplication/json")
+            .header(ACCEPT, "application/json")
             .send()
             .await
             .map_err(|e| format!("{e}"))?
@@ -243,7 +250,15 @@ impl ServerCtx {
         let jwks = CoreJsonWebKeySet::fetch_async(metadata.jwks_uri(), http_client)
             .await
             .map_err(|e| format!("{e}"))?;
-        metadata = metadata.set_jwks(jwks);
+
+        metadata = metadata
+            .set_jwks(jwks)
+            .set_authorization_endpoint(
+                AuthUrl::new("https://appleid.apple.com/auth/authorize".to_string()).unwrap(),
+            )
+            .set_token_endpoint(Some(
+                TokenUrl::new("https://appleid.apple.com/auth/token".to_string()).unwrap(),
+            ));
 
         let apple_oauth =
             CoreClient::from_provider_metadata(metadata, ClientId::new(client_id), None)
