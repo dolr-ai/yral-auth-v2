@@ -18,6 +18,7 @@ use tower_governor::{
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use yral_auth_v2::{
+    api::oauth_server_impl::handle_apple_oauth_form_post,
     api::server_impl::{
         handle_oauth_token_grant, handle_oidc_configuration, handle_well_known_jwks, healthz,
     },
@@ -54,6 +55,7 @@ async fn leptos_routes_handler(state: State<ServerState>, req: Request<AxumBody>
 fn server_routes(ctx: Arc<ServerCtx>) -> Router {
     Router::new()
         .route("/oauth/token", post(handle_oauth_token_grant))
+        .route("/oauth_callback", post(handle_apple_oauth_form_post))
         .route("/.well-known/jwks.json", get(handle_well_known_jwks))
         .route(
             "/.well-known/openid-configuration",
