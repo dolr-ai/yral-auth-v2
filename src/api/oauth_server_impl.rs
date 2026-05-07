@@ -2,7 +2,11 @@ use ic_agent::Identity;
 use std::borrow::Cow;
 use web_time::Duration;
 
-use axum::{http::header, response::IntoResponse};
+use axum::{
+    extract::Form,
+    http::header,
+    response::{IntoResponse, Redirect},
+};
 use axum_extra::extract::{
     cookie::{Cookie, SameSite},
     PrivateCookieJar,
@@ -111,7 +115,10 @@ pub async fn get_oauth_url_impl(
     #[cfg(feature = "apple-oauth")]
     let authorize_builder = {
         if provider == SupportedOAuthProviders::Apple {
-            authorize_builder.add_extra_param("response_mode", "query")
+            authorize_builder
+                .add_scope(Scope::new("email".to_string()))
+                .add_scope(Scope::new("name".to_string()))
+                .add_extra_param("response_mode", "form_post")
         } else {
             authorize_builder
         }
@@ -251,6 +258,10 @@ async fn generate_oauth_login_code(
     let redirect_uri = RedirectUrl::new(format!("{server_url}/oauth_callback"))
         .map_err(|e| AuthErrorKind::unexpected(e.to_string()))?;
 
+    log::info!(
+        "Exchanging code with redirect URI: {}",
+        redirect_uri.as_str()
+    );
     let exchange = oauth2
         .exchange_code(AuthorizationCode::new(code))
         .map_err(|e| AuthErrorKind::unexpected(e))?
@@ -284,6 +295,12 @@ async fn generate_oauth_login_code(
     let sub_id = claims.subject();
     let email = claims.email().map(|e| String::from(e.clone()));
 
+    log::info!(
+        "ID token verified for subject: {}, email: {:?}",
+        sub_id.as_str(),
+        email
+    );
+
     let maybe_principal =
         try_extract_principal_from_oauth_sub(provider, &ctx.kv_store, sub_id, email.as_deref())
             .await
@@ -292,8 +309,13 @@ async fn generate_oauth_login_code(
                 e
             })?;
     let principal = if let Some(principal_str) = maybe_principal {
-        Principal::from_text(principal_str)
-            .map_err(|_| AuthErrorKind::unexpected("Invalid principal from KV"))?
+        Principal::from_text(principal_str).map_err(|_| {
+            log::error!(
+                "Invalid principal stored in KV for subject: {}",
+                sub_id.as_str()
+            );
+            AuthErrorKind::unexpected("Invalid principal from KV")
+        })?
     } else {
         principal_from_login_hint_or_generate_and_save(
             provider,
@@ -328,35 +350,37 @@ pub async fn perform_oauth_login_impl(
     let ctx = expect_server_ctx();
     let mut jar: PrivateCookieJar = extract_with_state(&ctx.cookie_key).await.map_err(|e| {
         log::error!("Failed to extract jar: {}", e);
-        sentry::capture_message(&format!("Failed to extract jar: {}", e), sentry::Level::Error);
+        sentry::capture_message(
+            &format!("Failed to extract jar: {}", e),
+            sentry::Level::Error,
+        );
         e
     })?;
     let server_url = get_server_url_from_request().await.map_err(|e| {
         log::error!("Failed to get server url: {}", e);
-        sentry::capture_message(&format!("Failed to get server url: {}", e), sentry::Level::Error);
+        sentry::capture_message(
+            &format!("Failed to get server url: {}", e),
+            sentry::Level::Error,
+        );
         e
     })?;
 
-    let csrf_cookie = jar
-        .get(CSRF_TOKEN_COOKIE)
-        .ok_or_else(|| {
-            let err_msg = "csrf token not found";
-            sentry::capture_message(err_msg, sentry::Level::Error);
-            ServerFnError::new(err_msg)
-        })?;
+    let csrf_cookie = jar.get(CSRF_TOKEN_COOKIE).ok_or_else(|| {
+        let err_msg = "csrf token not found";
+        sentry::capture_message(err_msg, sentry::Level::Error);
+        ServerFnError::new(err_msg)
+    })?;
     if state != csrf_cookie.value() {
         let err_msg = "CSRF token mismatch";
         sentry::capture_message(err_msg, sentry::Level::Error);
         return Err(ServerFnError::new(err_msg));
     }
 
-    let pkce_cookie = jar
-        .get(PKCE_VERIFIER_COOKIE)
-        .ok_or_else(|| {
-            let err_msg = "pkce verifier not found";
-            sentry::capture_message(err_msg, sentry::Level::Error);
-            ServerFnError::new(err_msg)
-        })?;
+    let pkce_cookie = jar.get(PKCE_VERIFIER_COOKIE).ok_or_else(|| {
+        let err_msg = "pkce verifier not found";
+        sentry::capture_message(err_msg, sentry::Level::Error);
+        ServerFnError::new(err_msg)
+    })?;
     let pkce_verifier = PkceCodeVerifier::new(pkce_cookie.value().to_owned());
 
     jar = jar.remove(PKCE_VERIFIER_COOKIE);
@@ -378,6 +402,11 @@ pub async fn perform_oauth_login_impl(
     let req_state = query.state.clone();
     let mut redirect_uri = query.redirect_uri.clone();
 
+    log::info!(
+        "Successfully validated cookies, generating oauth login code for provider: {}",
+        state.provider
+    );
+
     let res =
         generate_oauth_login_code(code, pkce_verifier, state.provider, query, server_url).await;
     match res {
@@ -389,14 +418,101 @@ pub async fn perform_oauth_login_impl(
 
         Err(e) => {
             let err_msg = e.to_string();
-            sentry::capture_message(&format!("OAuth login failed: {}", err_msg), sentry::Level::Error);
+            sentry::capture_message(
+                &format!("OAuth login failed: {}", err_msg),
+                sentry::Level::Error,
+            );
             redirect_uri
-            .query_pairs_mut()
-            .clear()
-            .append_pair("error", &e.to_string())
-            .append_pair("state", &req_state)
+                .query_pairs_mut()
+                .clear()
+                .append_pair("error", &e.to_string())
+                .append_pair("state", &req_state)
         }
     };
 
     Ok(redirect_uri.to_string())
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AppleOAuthCallbackForm {
+    code: Option<String>,
+    state: Option<String>,
+    user: Option<String>,
+    error: Option<String>,
+    error_description: Option<String>,
+}
+
+pub async fn handle_apple_oauth_form_post(Form(form): Form<AppleOAuthCallbackForm>) -> Redirect {
+    Redirect::to(&apple_oauth_callback_redirect_path(&form))
+}
+
+fn apple_oauth_callback_redirect_path(form: &AppleOAuthCallbackForm) -> String {
+    if form.user.is_some() {
+        log::debug!("Apple OAuth form post included user payload");
+    }
+
+    let mut serializer = url::form_urlencoded::Serializer::new(String::new());
+    if let Some(error) = form.error.as_deref() {
+        serializer.append_pair("error", error);
+        if let Some(error_description) = form.error_description.as_deref() {
+            serializer.append_pair("error_description", error_description);
+        }
+        if let Some(state) = form.state.as_deref() {
+            serializer.append_pair("state", state);
+        }
+    } else if let (Some(code), Some(state)) = (form.code.as_deref(), form.state.as_deref()) {
+        serializer
+            .append_pair("code", code)
+            .append_pair("state", state);
+    } else {
+        serializer
+            .append_pair("error", "invalid_request")
+            .append_pair("error_description", "Missing code or state");
+        if let Some(state) = form.state.as_deref() {
+            serializer.append_pair("state", state);
+        }
+    }
+
+    format!("/oauth_callback?{}", serializer.finish())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn apple_oauth_callback_redirect_path_preserves_success_form_fields() {
+        let form = AppleOAuthCallbackForm {
+            code: Some("auth-code".to_string()),
+            state: Some("client-state".to_string()),
+            user: Some("{}".to_string()),
+            error: None,
+            error_description: None,
+        };
+
+        let redirect = apple_oauth_callback_redirect_path(&form);
+
+        assert_eq!(
+            "/oauth_callback?code=auth-code&state=client-state",
+            redirect
+        );
+    }
+
+    #[test]
+    fn apple_oauth_callback_redirect_path_preserves_error_form_fields() {
+        let form = AppleOAuthCallbackForm {
+            code: None,
+            state: Some("client-state".to_string()),
+            user: None,
+            error: Some("access_denied".to_string()),
+            error_description: Some("User cancelled".to_string()),
+        };
+
+        let redirect = apple_oauth_callback_redirect_path(&form);
+
+        assert_eq!(
+            "/oauth_callback?error=access_denied&error_description=User+cancelled&state=client-state",
+            redirect
+        );
+    }
 }
