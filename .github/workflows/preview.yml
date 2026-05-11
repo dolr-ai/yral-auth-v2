@@ -103,6 +103,11 @@ jobs:
             secret/data/yral-auth-v2/APPLE_TEAM_ID value | APPLE_TEAM_ID ;
             secret/data/yral-auth-v2/APPLE_KEY_ID value | APPLE_KEY_ID ;
             secret/data/yral-auth-v2/CLIENT_JWT_PUB_ED_PEM value | CLIENT_JWT_PUB_ED_PEM ;
+            secret/data/yral-auth-v2/DRAGONFLY_REDIS_STORE_CA_CERT value | DRAGONFLY_REDIS_STORE_CA_CERT ;
+            secret/data/yral-auth-v2/DRAGONFLY_REDIS_STORE_CLIENT_CERT value | DRAGONFLY_REDIS_STORE_CLIENT_CERT ;
+            secret/data/yral-auth-v2/DRAGONFLY_REDIS_STORE_CLIENT_KEY value | DRAGONFLY_REDIS_STORE_CLIENT_KEY ;
+            secret/data/yral-auth-v2/DRAGONFLY_REDIS_STORE_HOSTS value | DRAGONFLY_REDIS_STORE_HOSTS ;
+            secret/data/yral-auth-v2/DRAGONFLY_REDIS_STORE_PASSWORD value | DRAGONFLY_REDIS_STORE_PASSWORD ;
             secret/data/DRAGONFLY_CLUSTER_1_PASSWORD value | DRAGONFLY_PASSWORD ;
             secret/data/DRAGONFLY_CLUSTER_1_HOSTS value | DRAGONFLY_HOSTS ;
             secret/data/DRAGONFLY_CLUSTER_1_CA_CERT value | DRAGONFLY_CA_CERT ;
@@ -177,6 +182,12 @@ jobs:
           DRAGONFLY_CA_CERT: ${{ env.DRAGONFLY_CA_CERT }}
           DRAGONFLY_CLIENT_CERT: ${{ env.DRAGONFLY_CLIENT_CERT }}
           DRAGONFLY_CLIENT_KEY: ${{ env.DRAGONFLY_CLIENT_KEY }}
+          # new redis store secrets
+          DRAGONFLY_REDIS_STORE_CA_CERT: ${{ env.DRAGONFLY_REDIS_STORE_CA_CERT }}
+          DRAGONFLY_REDIS_STORE_CLIENT_CERT: ${{ env.DRAGONFLY_REDIS_STORE_CLIENT_CERT }}
+          DRAGONFLY_REDIS_STORE_CLIENT_KEY: ${{ env.DRAGONFLY_REDIS_STORE_CLIENT_KEY }}
+          DRAGONFLY_REDIS_STORE_HOSTS: ${{ env.DRAGONFLY_REDIS_STORE_HOSTS }}
+          DRAGONFLY_REDIS_STORE_PASSWORD: ${{ env.DRAGONFLY_REDIS_STORE_PASSWORD }}
           APP_ENV: "preview"
           PORT: "8080"
         run: |
@@ -201,6 +212,11 @@ jobs:
             --arg dragonfly_ca_cert "$DRAGONFLY_CA_CERT" \
             --arg dragonfly_client_cert "$DRAGONFLY_CLIENT_CERT" \
             --arg dragonfly_client_key "$DRAGONFLY_CLIENT_KEY" \
+            --arg dragonfly_redis_store_ca_cert "$DRAGONFLY_REDIS_STORE_CA_CERT" \
+            --arg dragonfly_redis_store_client_cert "$DRAGONFLY_REDIS_STORE_CLIENT_CERT" \
+            --arg dragonfly_redis_store_client_key "$DRAGONFLY_REDIS_STORE_CLIENT_KEY" \
+            --arg dragonfly_redis_store_hosts "$DRAGONFLY_REDIS_STORE_HOSTS" \
+            --arg dragonfly_redis_store_password "$DRAGONFLY_REDIS_STORE_PASSWORD" \
             --arg app_env "$APP_ENV" \
             --arg port "$PORT" \
             '[
@@ -221,6 +237,11 @@ jobs:
               {"key": "DRAGONFLY_CA_CERT", "value": $dragonfly_ca_cert, "is_multiline": true},
               {"key": "DRAGONFLY_CLIENT_CERT", "value": $dragonfly_client_cert, "is_multiline": true},
               {"key": "DRAGONFLY_CLIENT_KEY", "value": $dragonfly_client_key, "is_multiline": true},
+              {"key": "DRAGONFLY_REDIS_STORE_CA_CERT", "value": $dragonfly_redis_store_ca_cert, "is_multiline": true},
+              {"key": "DRAGONFLY_REDIS_STORE_CLIENT_CERT", "value": $dragonfly_redis_store_client_cert, "is_multiline": true},
+              {"key": "DRAGONFLY_REDIS_STORE_CLIENT_KEY", "value": $dragonfly_redis_store_client_key, "is_multiline": true},
+              {"key": "DRAGONFLY_REDIS_STORE_HOSTS", "value": $dragonfly_redis_store_hosts, "is_literal": true},
+              {"key": "DRAGONFLY_REDIS_STORE_PASSWORD", "value": $dragonfly_redis_store_password, "is_literal": true},
               {"key": "APP_ENV", "value": $app_env, "is_literal": true},
               {"key": "PORT", "value": $port, "is_literal": true}
             ]')

@@ -17,6 +17,7 @@ pub const REDIS_SENTINEL_PORT: u16 = 26379;
 pub const SENTINEL_SERVICE_NAME: &str = "mymaster";
 
 pub const TEST_KEY_PREFIX: &str = "test";
+pub const KEY_PREFIX: &str = "yral-auth";
 
 const SENTINEL_RECONNECT_DELAY: Duration = Duration::from_secs(1);
 
@@ -58,6 +59,27 @@ pub fn get_client_key_pem() -> Result<Vec<u8>, anyhow::Error> {
     ))
 }
 
+pub fn get_new_ca_cert_pem() -> Result<Vec<u8>, anyhow::Error> {
+    Ok(normalize_pem(
+        std::env::var("DRAGONFLY_REDIS_STORE_CA_CERT")
+            .expect("DRAGONFLY_REDIS_STORE_CA_CERT env var not set"),
+    ))
+}
+
+pub fn get_new_client_cert_pem() -> Result<Vec<u8>, anyhow::Error> {
+    Ok(normalize_pem(
+        std::env::var("DRAGONFLY_REDIS_STORE_CLIENT_CERT")
+            .expect("DRAGONFLY_REDIS_STORE_CLIENT_CERT env var not set"),
+    ))
+}
+
+pub fn get_new_client_key_pem() -> Result<Vec<u8>, anyhow::Error> {
+    Ok(normalize_pem(
+        std::env::var("DRAGONFLY_REDIS_STORE_CLIENT_KEY")
+            .expect("DRAGONFLY_REDIS_STORE_CLIENT_KEY env var not set"),
+    ))
+}
+
 fn build_tls_certs(
     ca_cert_bytes: Vec<u8>,
     client_cert_bytes: Vec<u8>,
@@ -75,6 +97,19 @@ fn build_tls_certs(
 fn get_hosts_from_env() -> Vec<String> {
     let hosts_str = std::env::var("DRAGONFLY_HOSTS")
         .expect("DRAGONFLY_HOSTS environment variable not set")
+        .trim()
+        .to_string();
+
+    hosts_str
+        .split(',')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect()
+}
+
+fn get_new_hosts_from_env() -> Vec<String> {
+    let hosts_str = std::env::var("DRAGONFLY_REDIS_STORE_HOSTS")
+        .expect("DRAGONFLY_REDIS_STORE_HOSTS environment variable not set")
         .trim()
         .to_string();
 
@@ -253,9 +288,11 @@ impl SentinelConnectionManager {
         Ok(client)
     }
 
-    pub async fn start_failover_listener(self: Arc<Self>, tls_certs: redis::TlsCertificates) {
-        let hosts = get_hosts_from_env();
-
+    pub async fn start_failover_listener(
+        self: Arc<Self>,
+        hosts: Vec<String>,
+        tls_certs: redis::TlsCertificates,
+    ) {
         if hosts.is_empty() {
             tracing::error!("No Sentinel hosts configured, failover listener disabled");
             return;
@@ -402,7 +439,7 @@ impl SentinelConnectionManager {
     }
 }
 
-pub async fn init_dragonfly_redis(
+pub async fn init_old_dragonfly_redis(
     ca_cert_bytes: Vec<u8>,
     client_cert_bytes: Vec<u8>,
     client_key_bytes: Vec<u8>,
@@ -451,9 +488,73 @@ pub async fn init_dragonfly_redis(
     // Start failover listener
     let conn_man_for_listener = conn_man_arc.clone();
     let tls_certs_for_listener = tls_certs.clone();
+    let hosts_for_listener = hosts.clone();
     tokio::spawn(async move {
         conn_man_for_listener
-            .start_failover_listener(tls_certs_for_listener)
+            .start_failover_listener(hosts_for_listener, tls_certs_for_listener)
+            .await;
+    });
+
+    let pool = DragonflyPool::new(conn_man_arc);
+
+    tracing::info!("Dragonfly connection pool initialized");
+
+    Ok(pool)
+}
+
+pub async fn init_new_dragonfly_redis(
+    ca_cert_bytes: Vec<u8>,
+    client_cert_bytes: Vec<u8>,
+    client_key_bytes: Vec<u8>,
+) -> Result<Arc<DragonflyPool>, KVError> {
+    rustls::crypto::ring::default_provider()
+        .install_default()
+        .ok();
+
+    let tls_certs = build_tls_certs(
+        ca_cert_bytes.clone(),
+        client_cert_bytes.clone(),
+        client_key_bytes.clone(),
+    );
+
+    let hosts = get_new_hosts_from_env();
+
+    let conn_addr: Vec<ConnectionAddr> = hosts
+        .iter()
+        .map(|ip| ConnectionAddr::TcpTls {
+            host: ip.clone(),
+            port: REDIS_SENTINEL_PORT,
+            insecure: false,
+            tls_params: None,
+        })
+        .collect();
+
+    let dragonfly_pass = std::env::var("DRAGONFLY_REDIS_STORE_PASSWORD")
+        .expect("DRAGONFLY_REDIS_STORE_PASSWORD environment variable not set");
+
+    let mut builder =
+        SentinelClientBuilder::new(conn_addr, SENTINEL_SERVICE_NAME, SentinelServerType::Master)?;
+
+    builder = builder.set_client_to_sentinel_certificates(tls_certs.clone());
+
+    builder = builder.set_client_to_redis_username("default");
+    builder = builder.set_client_to_redis_password(dragonfly_pass);
+    builder = builder.set_client_to_redis_certificates(tls_certs.clone());
+    builder = builder.set_client_to_redis_tls_mode(redis::TlsMode::Secure);
+
+    let sentinel_client = builder.build().expect("Failed to build SentinelClient");
+    let conn_man =
+        SentinelConnectionManager::new(sentinel_client, SENTINEL_SERVICE_NAME.to_string())?;
+
+    let conn_man_arc = Arc::new(conn_man);
+
+    // Start failover listener
+    let conn_man_for_listener = conn_man_arc.clone();
+    let tls_certs_for_listener = tls_certs.clone();
+    let hosts_for_listener = hosts.clone();
+    tokio::spawn(async move {
+        conn_man_for_listener
+            .start_failover_listener(hosts_for_listener, tls_certs_for_listener)
             .await;
     });
 
@@ -508,9 +609,10 @@ pub async fn init_dragonfly_redis_for_test() -> Result<Arc<DragonflyPool>, KVErr
     // Start failover listener
     let conn_man_for_listener = conn_man_arc.clone();
     let tls_certs_for_listener = tls_certs.clone();
+    let hosts_for_listener = hosts.clone();
     tokio::spawn(async move {
         conn_man_for_listener
-            .start_failover_listener(tls_certs_for_listener)
+            .start_failover_listener(hosts_for_listener, tls_certs_for_listener)
             .await;
     });
 
@@ -522,13 +624,23 @@ pub async fn init_dragonfly_redis_for_test() -> Result<Arc<DragonflyPool>, KVErr
 #[derive(Clone)]
 pub struct DragonflyKV(Arc<DragonflyPool>);
 impl DragonflyKV {
-    pub async fn new() -> Result<Self, anyhow::Error> {
+    pub async fn old() -> Result<Self, anyhow::Error> {
         let ca_cert_bytes = get_ca_cert_pem().expect("Failed to read CA cert");
         let client_cert_bytes = get_client_cert_pem().expect("Failed to read client cert");
         let client_key_bytes = get_client_key_pem().expect("Failed to read client key");
 
         let dragonfly_pool =
-            init_dragonfly_redis(ca_cert_bytes, client_cert_bytes, client_key_bytes).await?;
+            init_old_dragonfly_redis(ca_cert_bytes, client_cert_bytes, client_key_bytes).await?;
+        Ok(Self(dragonfly_pool))
+    }
+
+    pub async fn new() -> Result<Self, anyhow::Error> {
+        let ca_cert_bytes = get_new_ca_cert_pem().expect("Failed to read newCA cert");
+        let client_cert_bytes = get_new_client_cert_pem().expect("Failed to read client cert");
+        let client_key_bytes = get_new_client_key_pem().expect("Failed to read client key");
+
+        let dragonfly_pool =
+            init_new_dragonfly_redis(ca_cert_bytes, client_cert_bytes, client_key_bytes).await?;
         Ok(Self(dragonfly_pool))
     }
 }
