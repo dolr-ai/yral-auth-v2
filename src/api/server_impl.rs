@@ -17,11 +17,18 @@ use yral_types::delegated_identity::DelegatedIdentityWire;
 use crate::{
     api::ai_accounts::get_ai_accounts_for_principal,
     context::server::ServerCtx,
-    kv::{KVStore, dragonfly_kv::{KEY_PREFIX, format_to_dragonfly_key}},
+    kv::{
+        dragonfly_kv::{format_to_dragonfly_key, KEY_PREFIX},
+        KVStore,
+    },
     oauth::{
-        AuthGrantQuery, PartialOIDCConfig, TokenGrantError, TokenGrantErrorKind, TokenGrantRes, TokenGrantResult, client_validation::{ClientIdValidator, OAuthClientType, ValidationRes}, jwt::{
-            AuthCodeClaims, RefreshTokenClaims, generate::{generate_access_token_and_id_token_jwt, generate_refresh_token_jwt}
-        }
+        client_validation::{ClientIdValidator, OAuthClientType, ValidationRes},
+        jwt::{
+            generate::{generate_access_token_and_id_token_jwt, generate_refresh_token_jwt},
+            AuthCodeClaims, RefreshTokenClaims,
+        },
+        AuthGrantQuery, PartialOIDCConfig, TokenGrantError, TokenGrantErrorKind, TokenGrantRes,
+        TokenGrantResult,
     },
     utils::{
         identity::generate_random_identity_and_save,
@@ -210,7 +217,10 @@ async fn generate_access_token(
 ) -> Result<TokenGrantRes, TokenGrantError> {
     let identity_jwk = ctx
         .kv_store
-        .read(user_principal.to_text())
+        .read(format_to_dragonfly_key(
+            KEY_PREFIX,
+            &user_principal.to_text(),
+        ))
         .await
         .map_err(|e| TokenGrantError {
             error: TokenGrantErrorKind::ServerError,
@@ -391,7 +401,7 @@ async fn client_credentials_grant_for_backend(
     let internal_key = backend_service_principal_lookup_key(&client_id);
     let princ_res = ctx
         .kv_store
-        .read(internal_key.clone())
+        .read(format_to_dragonfly_key(KEY_PREFIX, &internal_key))
         .await
         .map_err(|e| TokenGrantError {
             error: TokenGrantErrorKind::ServerError,
@@ -420,7 +430,7 @@ async fn client_credentials_grant_for_backend(
         .await;
     }
 
-    let identity = generate_random_identity_and_save(&ctx.kv_store, &ctx.new_kv_store)
+    let identity = generate_random_identity_and_save(&ctx.kv_store)
         .await
         .map_err(|e| TokenGrantError {
             error: TokenGrantErrorKind::ServerError,
@@ -432,15 +442,10 @@ async fn client_credentials_grant_for_backend(
     crate::middleware::sentry_user::set_user_context(principal);
 
     ctx.kv_store
-        .write(internal_key.clone(), principal.to_text())
-        .await
-        .map_err(|e| TokenGrantError {
-            error: TokenGrantErrorKind::ServerError,
-            error_description: e.to_string(),
-        })?;
-
-    ctx.new_kv_store
-        .write(format_to_dragonfly_key(KEY_PREFIX, &internal_key), principal.to_text())
+        .write(
+            format_to_dragonfly_key(KEY_PREFIX, &internal_key),
+            principal.to_text(),
+        )
         .await
         .map_err(|e| TokenGrantError {
             error: TokenGrantErrorKind::ServerError,
@@ -477,7 +482,7 @@ async fn handle_client_credentials_grant(
         return client_credentials_grant_for_backend(ctx, client_id, validation_res).await;
     }
 
-    let identity = generate_random_identity_and_save(&ctx.kv_store, &ctx.new_kv_store)
+    let identity = generate_random_identity_and_save(&ctx.kv_store)
         .await
         .map_err(|e| TokenGrantError {
             error: TokenGrantErrorKind::ServerError,

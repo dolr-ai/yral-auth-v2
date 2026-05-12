@@ -108,11 +108,6 @@ jobs:
             secret/data/yral-auth-v2/DRAGONFLY_REDIS_STORE_CLIENT_KEY value | DRAGONFLY_REDIS_STORE_CLIENT_KEY ;
             secret/data/yral-auth-v2/DRAGONFLY_REDIS_STORE_HOSTS value | DRAGONFLY_REDIS_STORE_HOSTS ;
             secret/data/yral-auth-v2/DRAGONFLY_REDIS_STORE_PASSWORD value | DRAGONFLY_REDIS_STORE_PASSWORD ;
-            secret/data/DRAGONFLY_CLUSTER_1_PASSWORD value | DRAGONFLY_PASSWORD ;
-            secret/data/DRAGONFLY_CLUSTER_1_HOSTS value | DRAGONFLY_HOSTS ;
-            secret/data/DRAGONFLY_CLUSTER_1_CA_CERT value | DRAGONFLY_CA_CERT ;
-            secret/data/DRAGONFLY_CLUSTER_1_CLIENT_CERT value | DRAGONFLY_CLIENT_CERT ;
-            secret/data/DRAGONFLY_CLUSTER_1_CLIENT_KEY value | DRAGONFLY_CLIENT_KEY ;
             secret/data/COOLIFY_ENV_UUID value | COOLIFY_ENV_UUID ;
             secret/data/COOLIFY_PROJECT_UUID value | COOLIFY_PROJECT_UUID ;
             secret/data/COOLIFY_SERVER_UUID value | COOLIFY_SERVER_UUID ;
@@ -177,12 +172,7 @@ jobs:
           APPLE_TEAM_ID: ${{ env.APPLE_TEAM_ID }}
           APPLE_KEY_ID: ${{ env.APPLE_KEY_ID }}
           CLIENT_JWT_PUB_ED_PEM: ${{ env.CLIENT_JWT_PUB_ED_PEM }}
-          DRAGONFLY_PASSWORD: ${{ env.DRAGONFLY_PASSWORD }}
-          DRAGONFLY_HOSTS: ${{ env.DRAGONFLY_HOSTS }}
-          DRAGONFLY_CA_CERT: ${{ env.DRAGONFLY_CA_CERT }}
-          DRAGONFLY_CLIENT_CERT: ${{ env.DRAGONFLY_CLIENT_CERT }}
-          DRAGONFLY_CLIENT_KEY: ${{ env.DRAGONFLY_CLIENT_KEY }}
-          # new redis store secrets
+          #redis store secrets
           DRAGONFLY_REDIS_STORE_CA_CERT: ${{ env.DRAGONFLY_REDIS_STORE_CA_CERT }}
           DRAGONFLY_REDIS_STORE_CLIENT_CERT: ${{ env.DRAGONFLY_REDIS_STORE_CLIENT_CERT }}
           DRAGONFLY_REDIS_STORE_CLIENT_KEY: ${{ env.DRAGONFLY_REDIS_STORE_CLIENT_KEY }}
@@ -207,11 +197,6 @@ jobs:
             --arg apple_team_id "$APPLE_TEAM_ID" \
             --arg apple_key_id "$APPLE_KEY_ID" \
             --arg client_jwt_pub_ed_pem "$CLIENT_JWT_PUB_ED_PEM" \
-            --arg dragonfly_password "$DRAGONFLY_PASSWORD" \
-            --arg dragonfly_hosts "$DRAGONFLY_HOSTS" \
-            --arg dragonfly_ca_cert "$DRAGONFLY_CA_CERT" \
-            --arg dragonfly_client_cert "$DRAGONFLY_CLIENT_CERT" \
-            --arg dragonfly_client_key "$DRAGONFLY_CLIENT_KEY" \
             --arg dragonfly_redis_store_ca_cert "$DRAGONFLY_REDIS_STORE_CA_CERT" \
             --arg dragonfly_redis_store_client_cert "$DRAGONFLY_REDIS_STORE_CLIENT_CERT" \
             --arg dragonfly_redis_store_client_key "$DRAGONFLY_REDIS_STORE_CLIENT_KEY" \
@@ -232,11 +217,6 @@ jobs:
               {"key": "APPLE_TEAM_ID", "value": $apple_team_id, "is_literal": true},
               {"key": "APPLE_KEY_ID", "value": $apple_key_id, "is_literal": true},
               {"key": "CLIENT_JWT_PUB_ED_PEM", "value": $client_jwt_pub_ed_pem, "is_multiline": true},
-              {"key": "DRAGONFLY_PASSWORD", "value": $dragonfly_password, "is_literal": true},
-              {"key": "DRAGONFLY_HOSTS", "value": $dragonfly_hosts, "is_literal": true},
-              {"key": "DRAGONFLY_CA_CERT", "value": $dragonfly_ca_cert, "is_multiline": true},
-              {"key": "DRAGONFLY_CLIENT_CERT", "value": $dragonfly_client_cert, "is_multiline": true},
-              {"key": "DRAGONFLY_CLIENT_KEY", "value": $dragonfly_client_key, "is_multiline": true},
               {"key": "DRAGONFLY_REDIS_STORE_CA_CERT", "value": $dragonfly_redis_store_ca_cert, "is_multiline": true},
               {"key": "DRAGONFLY_REDIS_STORE_CLIENT_CERT", "value": $dragonfly_redis_store_client_cert, "is_multiline": true},
               {"key": "DRAGONFLY_REDIS_STORE_CLIENT_KEY", "value": $dragonfly_redis_store_client_key, "is_multiline": true},

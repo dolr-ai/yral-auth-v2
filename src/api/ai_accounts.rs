@@ -1,4 +1,7 @@
-use crate::{api::ai_accounts::server_fn::codec::Json, kv::dragonfly_kv::{KEY_PREFIX, format_to_dragonfly_key}};
+use crate::{
+    api::ai_accounts::server_fn::codec::Json,
+    kv::dragonfly_kv::{format_to_dragonfly_key, KEY_PREFIX},
+};
 #[cfg(feature = "ssr")]
 use crate::{context::server::ServerCtx, kv::KVStore, utils::time::current_epoch};
 use candid::Principal;
@@ -83,9 +86,10 @@ pub async fn create_ai_account(
     let main_principal = user_principal;
 
     let ai_account_check_key = ai_account_reverse_lookup_key(&main_principal);
+    let formatted_ai_account_check_key = format_to_dragonfly_key(KEY_PREFIX, &ai_account_check_key);
     if ctx
         .kv_store
-        .has_key(ai_account_check_key)
+        .has_key(formatted_ai_account_check_key)
         .await
         .unwrap_or(false)
     {
@@ -97,7 +101,8 @@ pub async fn create_ai_account(
     let mut next_slot: Option<u8> = None;
     for num in 1..=MAX_AI_ACCOUNTS {
         let key = ai_account_key(&main_principal, num);
-        match ctx.kv_store.has_key(key).await {
+        let formatted_key = format_to_dragonfly_key(KEY_PREFIX, &key);
+        match ctx.kv_store.has_key(formatted_key).await {
             Ok(exists) => {
                 if !exists && next_slot.is_none() {
                     next_slot = Some(num);
@@ -124,11 +129,8 @@ pub async fn create_ai_account(
 
     let key = ai_account_key(&main_principal, slot);
     let formatted_key = format_to_dragonfly_key(KEY_PREFIX, &key);
-    if let Err(e) = ctx.kv_store.write(key, ai_secret_jwk.clone()).await {
-        return Err(ServerFnError::new(format!("Storage error: {}", e)));
-    }
 
-    if let Err(e) = ctx.new_kv_store.write(formatted_key, ai_secret_jwk).await {
+    if let Err(e) = ctx.kv_store.write(formatted_key, ai_secret_jwk).await {
         return Err(ServerFnError::new(format!("Storage error: {}", e)));
     }
 
@@ -136,17 +138,9 @@ pub async fn create_ai_account(
     let ai_account_principal = ai_identity.sender().unwrap();
     let reverse_key = ai_account_reverse_lookup_key(&ai_account_principal);
     let formatted_reverse_key = format_to_dragonfly_key(KEY_PREFIX, &reverse_key);
+
     if let Err(e) = ctx
         .kv_store
-        .write(reverse_key, main_principal.to_text())
-        .await
-    {
-        return Err(ServerFnError::new(format!("Storage error: {}", e)));
-    }
-
-
-    if let Err(e) = ctx
-        .new_kv_store
         .write(formatted_reverse_key, main_principal.to_text())
         .await
     {
@@ -167,7 +161,8 @@ pub async fn get_ai_accounts_for_principal(
 
     for num in 1..=MAX_AI_ACCOUNTS {
         let key = ai_account_key(&main_principal, num);
-        match ctx.kv_store.read(key).await {
+        let formatted_key = format_to_dragonfly_key(KEY_PREFIX, &key);
+        match ctx.kv_store.read(formatted_key).await {
             Ok(Some(jwk_str)) => {
                 if let Ok(secret_key) = k256::SecretKey::from_jwk_str(&jwk_str) {
                     let delegated_identity =
