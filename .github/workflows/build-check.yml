@@ -10,17 +10,13 @@ on:
         type: boolean
   workflow_dispatch:
 
-permissions:
-  id-token: write
-  contents: read
-  packages: write
-
 jobs:
   build_check:
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
+      id-token: write
 
     steps:
       - name: Checkout repo and submodules
