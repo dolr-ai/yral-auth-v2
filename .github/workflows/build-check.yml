@@ -16,6 +16,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+      id-token: write
 
     steps:
       - name: Checkout repo and submodules
@@ -55,14 +56,28 @@ jobs:
       - name: Create gh config placeholder
         run: mkdir -p ~/.config/gh
 
+      - name: Import Secrets from Vault
+        uses: hashicorp/vault-action@v3
+        with:
+          url: https://vault.yral.com
+          method: jwt
+          role: yral-auth-v2-role
+          jwtGithubAudience: "https://github.com/dolr-ai"
+          secrets: |
+            secret/data/yral-auth-v2/DRAGONFLY_REDIS_STORE_CA_CERT value | DRAGONFLY_REDIS_STORE_CA_CERT ;
+            secret/data/yral-auth-v2/DRAGONFLY_REDIS_STORE_CLIENT_CERT value | DRAGONFLY_REDIS_STORE_CLIENT_CERT ;
+            secret/data/yral-auth-v2/DRAGONFLY_REDIS_STORE_CLIENT_KEY value | DRAGONFLY_REDIS_STORE_CLIENT_KEY ;
+            secret/data/yral-auth-v2/DRAGONFLY_REDIS_STORE_HOSTS value | DRAGONFLY_REDIS_STORE_HOSTS ;
+            secret/data/yral-auth-v2/DRAGONFLY_REDIS_STORE_PASSWORD value | DRAGONFLY_REDIS_STORE_PASSWORD ;
+
       - name: Run build check in devcontainer
         uses: devcontainers/ci@v0.3
         env:
-          DRAGONFLY_HOSTS: ${{ vars.DRAGONFLY_HOSTS }}
-          DRAGONFLY_PASSWORD: ${{ secrets.DRAGONFLY_PASSWORD }}
-          DRAGONFLY_CA_CERT: ${{ secrets.DRAGONFLY_CA_CERT }}
-          DRAGONFLY_CLIENT_CERT: ${{ secrets.DRAGONFLY_CLIENT_CERT }}
-          DRAGONFLY_CLIENT_KEY: ${{ secrets.DRAGONFLY_CLIENT_KEY }}
+          DRAGONFLY_REDIS_STORE_HOSTS: ${{ env.DRAGONFLY_REDIS_STORE_HOSTS }}
+          DRAGONFLY_REDIS_STORE_PASSWORD: ${{ env.DRAGONFLY_REDIS_STORE_PASSWORD }}
+          DRAGONFLY_REDIS_STORE_CA_CERT: ${{ env.DRAGONFLY_REDIS_STORE_CA_CERT }}
+          DRAGONFLY_REDIS_STORE_CLIENT_CERT: ${{ env.DRAGONFLY_REDIS_STORE_CLIENT_CERT }}
+          DRAGONFLY_REDIS_STORE_CLIENT_KEY: ${{ env.DRAGONFLY_REDIS_STORE_CLIENT_KEY }}
           LEPTOS_BIN_TARGET_TRIPLE: x86_64-unknown-linux-musl
           LEPTOS_HASH_FILES: "true"
           LEPTOS_TAILWIND_VERSION: v4.0.15
@@ -72,11 +87,11 @@ jobs:
           push: filter
           refFilterForPush: refs/heads/main
           env: |
-            DRAGONFLY_HOSTS
-            DRAGONFLY_PASSWORD
-            DRAGONFLY_CA_CERT
-            DRAGONFLY_CLIENT_CERT
-            DRAGONFLY_CLIENT_KEY
+            DRAGONFLY_REDIS_STORE_HOSTS
+            DRAGONFLY_REDIS_STORE_PASSWORD
+            DRAGONFLY_REDIS_STORE_CA_CERT
+            DRAGONFLY_REDIS_STORE_CLIENT_CERT
+            DRAGONFLY_REDIS_STORE_CLIENT_KEY
             LEPTOS_BIN_TARGET_TRIPLE
             LEPTOS_HASH_FILES
             LEPTOS_TAILWIND_VERSION
